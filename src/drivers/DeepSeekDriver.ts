@@ -1,0 +1,282 @@
+import { BaseDriver } from './BaseDriver.js';
+import { ProviderConfig, ProviderType } from '../types/providers.js';
+import { logger } from '../utils/logger.js';
+
+export const DEEPSEEK_CONFIG: ProviderConfig = {
+  id: ProviderType.DEEPSEEK,
+  displayName: 'DeepSeek Chat (Leader)',
+  url: 'https://chat.deepseek.com',
+  sessionDirName: 'deepseek',
+  defaultTimeoutMs: 300000, // 5 minutos
+  selectors: {
+    inputPrompt: [
+      '#chat-input',
+      'textarea[id="chat-input"]',
+      'textarea[placeholder*="DeepSeek"]',
+      'textarea[placeholder*="Pregúnt"]',
+      'textarea[placeholder*="Ask"]',
+      'textarea[placeholder*="Message"]',
+      'textarea.ds-input',
+      'div[class*="chat-input"] textarea',
+      'div[class*="input"] textarea',
+      'textarea',
+      'div[contenteditable="true"]',
+      '[contenteditable="true"]',
+    ],
+    sendButton: [
+      'div[role="button"][aria-label*="Send"]',
+      'div[role="button"][aria-label*="Enviar"]',
+      'button[aria-label*="Send"]',
+      'button[aria-label*="Enviar"]',
+      'div[class*="send-button"]',
+      'div.ds-icon-button:has(svg)',
+      'div[role="button"]:has(svg)',
+      'button[type="submit"]',
+      '.ds-icon-button',
+    ],
+    stopButton: [
+      'div[role="button"][aria-label*="Stop"]',
+      'button[aria-label*="Stop"]',
+      'button[aria-label*="Detener"]',
+      'div[class*="stop"]',
+      '.ds-loading-icon',
+      'svg.ds-stop-icon',
+      'button:has(svg.ds-stop-icon)',
+      'div:has(svg.ds-stop-icon)',
+    ],
+    responseContainer: [
+      '.ds-markdown',
+      'div[class*="ds-markdown"]',
+      'div.ds-markdown-html',
+      'div[class*="ds-message-item"]',
+      'div.ds-message-item',
+      'div.chat-message:not(.chat-message-user)',
+      'div[class*="message-assistant"]',
+      'div[class*="message-content"]',
+      'div.markdown-body',
+      'div.markdown',
+    ],
+    chatTurns: [
+      'div.ds-message-item',
+      'div[class*="chat-message"]',
+      'div[class*="message-content"]',
+    ],
+  },
+};
+
+export class DeepSeekDriver extends BaseDriver {
+  constructor(customConfig?: Partial<ProviderConfig>) {
+    super({ ...DEEPSEEK_CONFIG, ...customConfig });
+  }
+
+  public async isStreaming(): Promise<boolean> {
+    if (!this.page) return false;
+    for (const stopSel of this.config.selectors.stopButton) {
+      try {
+        const stopEl = this.page.locator(stopSel).first();
+        if (await stopEl.isVisible({ timeout: 250 })) {
+          return true;
+        }
+      } catch {
+        // Ignorar
+      }
+    }
+    return false;
+  }
+
+  public async sendMessage(prompt: string): Promise<string> {
+    if (!this.page) throw new Error('Driver DeepSeek no está inicializado.');
+
+    await this.ensureChatPage();
+
+    // 1. Localizar input con polling de hasta 10s para SPA hydration
+    const inputSelector = await this.findFirstVisibleSelector(this.config.selectors.inputPrompt, 10000);
+    if (!inputSelector) {
+      throw new Error(
+        'No se encontró el campo de entrada de DeepSeek. Si no has iniciado sesión, ejecuta primero: barhel login deepseek'
+      );
+    }
+
+    const inputLocator = this.page.locator(inputSelector).first();
+    await inputLocator.click();
+
+    // Rellenar prompt de forma nativa e invocar setter de React
+    try {
+      await inputLocator.fill(prompt);
+    } catch {
+      // Fallback evaluate
+    }
+
+    await this.page.evaluate(
+      ({ sel, text }) => {
+        const el = document.querySelector(sel) as HTMLTextAreaElement;
+        if (el) {
+          el.focus();
+          const proto = Object.getPrototypeOf(el);
+          const setter =
+            Object.getOwnPropertyDescriptor(proto, 'value')?.set ||
+            Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+          if (setter) {
+            setter.call(el, text);
+          } else {
+            el.value = text;
+          }
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      },
+      { sel: inputSelector, text: prompt }
+    );
+
+    await this.page.waitForTimeout(300);
+
+    // 2. Disparar envío: Presionar Enter y clickear el botón de enviar
+    await inputLocator.focus();
+    await this.page.keyboard.press('Enter');
+    await this.page.waitForTimeout(200);
+
+    // Click en botón de enviar mediante evaluate directo en el DOM
+    await this.page.evaluate(() => {
+      const buttons = Array.from(
+        document.querySelectorAll(
+          'div.ds-icon-button, button[type="submit"], div[role="button"]:has(svg), button:has(svg), div[class*="send"]'
+        )
+      );
+
+      for (const btn of buttons) {
+        const aria = btn.getAttribute('aria-label') || '';
+        const cls = btn.className || '';
+        if (aria.includes('Stop') || cls.includes('stop')) continue;
+
+        if (
+          aria.toLowerCase().includes('send') ||
+          aria.toLowerCase().includes('enviar') ||
+          cls.includes('send') ||
+          cls.includes('ds-icon-button')
+        ) {
+          (btn as HTMLElement).click();
+        }
+      }
+    });
+
+    // Fallback con locators de Playwright
+    for (const sel of this.config.selectors.sendButton) {
+      try {
+        const btn = this.page.locator(sel).last();
+        if (await btn.isVisible({ timeout: 200 })) {
+          await btn.click({ timeout: 400, force: true });
+        }
+      } catch {
+        // Ignorar
+      }
+    }
+
+    logger.startSpinner('DeepSeek está razonando y generando respuesta...');
+
+    // 3. Esperar generación y streaming
+    await this.waitForCompletion();
+
+    logger.stopSpinner();
+
+    // 4. Extraer el texto de la última respuesta
+    const responseText = await this.extractLatestResponse();
+    if (!responseText) {
+      throw new Error('No se pudo extraer la respuesta de DeepSeek.');
+    }
+
+    return responseText;
+  }
+
+  private async waitForCompletion(): Promise<void> {
+    if (!this.page) return;
+
+    const startTime = Date.now();
+    const maxTimeout = this.config.defaultTimeoutMs;
+    let stableCount = 0;
+    let lastContent = '';
+    let hasStarted = false;
+
+    // Esperar mínimo inicial para que la red procese el envío
+    await this.page.waitForTimeout(2000);
+
+    while (Date.now() - startTime < maxTimeout) {
+      const streaming = await this.isStreaming();
+      const currentContent = (await this.extractLatestResponse()).trim();
+
+      if (streaming || currentContent.length > 0) {
+        hasStarted = true;
+      }
+
+      if (hasStarted) {
+        if (!streaming) {
+          if (currentContent.length > 0 && currentContent === lastContent) {
+            stableCount++;
+            if (stableCount >= 2) {
+              // Estabilizado
+              break;
+            }
+          } else {
+            stableCount = 0;
+          }
+        } else {
+          stableCount = 0;
+        }
+      }
+
+      lastContent = currentContent;
+      await this.page.waitForTimeout(800);
+    }
+  }
+
+  private async extractLatestResponse(): Promise<string> {
+    if (!this.page) return '';
+
+    try {
+      const text = await this.page.evaluate(() => {
+        // 1. Probar selectores conocidos de DeepSeek
+        const candidateSelectors = [
+          '.ds-markdown',
+          '.ds-markdown-html',
+          'div[class*="ds-markdown"]',
+          'div.ds-message-item:not(:has(.ds-message-user))',
+          'div[class*="message-assistant"]',
+          'div[class*="chat-message"]:not([class*="user"])',
+          'div[class*="message-content"]',
+          'div.markdown-body',
+          'div.markdown',
+        ];
+
+        for (const sel of candidateSelectors) {
+          const els = Array.from(document.querySelectorAll(sel));
+          if (els.length > 0) {
+            const last = els[els.length - 1] as HTMLElement;
+            const t = last.innerText?.trim() || last.textContent?.trim() || '';
+            if (t.length > 0) return t;
+          }
+        }
+
+        // 2. Fallback: buscar los turnos de conversación y tomar el último
+        const allMessages = Array.from(
+          document.querySelectorAll('div[class*="message"], div[class*="chat"], article')
+        );
+        for (let i = allMessages.length - 1; i >= 0; i--) {
+          const el = allMessages[i] as HTMLElement;
+          const cls = el.className || '';
+          if (typeof cls === 'string' && (cls.includes('user') || cls.includes('input') || cls.includes('prompt'))) {
+            continue;
+          }
+          const t = el.innerText?.trim() || '';
+          if (t.length > 5 && !t.startsWith('barhel') && !t.includes('ERES BARHEL')) {
+            return t;
+          }
+        }
+
+        return '';
+      });
+
+      return text ? text.trim() : '';
+    } catch {
+      return '';
+    }
+  }
+}

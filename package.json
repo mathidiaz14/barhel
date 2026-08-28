@@ -1,0 +1,60 @@
+{
+  "name": "barhel",
+  "version": "1.0.0",
+  "description": "Asistente de codificación interactivo en terminal estilo Claude Code / OpenCode impulsado por LLMs web",
+  "main": "dist/bin/run.js",
+  "type": "module",
+  "bin": {
+    "barhel": "./dist/bin/run.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "tsc",
+    "postinstall": "playwright install chromium",
+    "start": "node dist/bin/run.js",
+    "dev": "tsx bin/run.ts",
+    "login": "tsx bin/run.ts login",
+    "test": "echo \"No tests specified\" && exit 0"
+  },
+  "keywords": [
+    "barhel",
+    "ai",
+    "coding-assistant",
+    "cli",
+    "tui",
+    "claude-code",
+    "opencode",
+    "playwright",
+    "deepseek",
+    "chatgpt",
+    "gemini",
+    "react-loop",
+    "autonomous-agent"
+  ],
+  "author": "mathidiaz14",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mathidiaz14/barhel.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mathidiaz14/barhel/issues"
+  },
+  "homepage": "https://github.com/mathidiaz14/barhel#readme",
+  "dependencies": {
+    "@inquirer/prompts": "^8.7.0",
+    "commander": "^12.1.0",
+    "ora": "^8.1.0",
+    "picocolors": "^1.1.1",
+    "playwright": "^1.48.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.5",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.3"
+  }
+}
