@@ -46,6 +46,7 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
     );
   };
 
+  console.clear();
   printCurrentBanner();
 
   // Inicializar la sesión del navegador

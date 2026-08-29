@@ -211,7 +211,7 @@ export class TUI {
   }
 
   /**
-   * Banner principal estilo Claude Code
+   * Banner principal estilo ventana OpenCode / Claude Code
    */
   public static renderBanner(
     workdir: string = process.cwd(),
@@ -227,18 +227,28 @@ export class TUI {
       ? `${pc.bold(sessionTitle || 'Sesión activa')} ${pc.dim(`(#${sessionId})`)}`
       : 'Nueva sesión';
 
-    console.log(`
-${pc.magenta(pc.bold(' ▐█▀▀▀ █▀█ █▀█ █ █ █▀▀ █   '))}
-${pc.magenta(pc.bold(' ▐█▀▀▀ █▀█ █▀▄ █▀█ ██▄ █▄▄ '))}
-${pc.dim('  Autonomous CLI Coding Assistant (Claude Code & OpenCode Engine)')}
+    const b = pc.cyan;
+    const g = pc.gray;
+    const w = 70;
 
-${pc.gray('📁 Workspace:')} ${pc.bold(dirName)} ${pc.dim(`(${workdir})`)}
-${pc.gray('💬 Sesión:')}    ${pc.cyan(sessionInfo)}
-${pc.gray('🛡️  Modo:')}      ${modeBadge} ${pc.dim('(usa /auto para alternar)')}
-${pc.gray('👑 Líder:')}     ${pc.bold(pc.cyan(leaderName))}
-${pc.gray('👥 Workers:')}   ${pc.yellow(workersStr || 'Ninguno')} ${pc.dim('(usa /config)')}
-${pc.gray('💡 Atajos:')}    ${pc.cyan('/workers')} ${pc.dim('análisis |')} ${pc.cyan('/resume')} ${pc.dim('historial |')} ${pc.cyan('/new')} ${pc.dim('nueva sesión |')} ${pc.cyan('/help')}
-${pc.gray('═'.repeat(64))}
+    console.log(`
+${b('╭─')} ${pc.red('●')} ${pc.yellow('●')} ${pc.green('●')} ${b('─'.repeat(16))} ${pc.bold(pc.white('BARHEL CODE ASSISTANT'))} ${b('─'.repeat(16))} ${pc.dim('v1.0.0')} ${b('─╮')}
+${b('│')}                                                                          ${b('│')}
+${b('│')}     ${pc.cyan(pc.bold('____             __          __'))}                                   ${b('│')}
+${b('│')}    ${pc.cyan(pc.bold('/ __ )____ ______/ /_  ___   / /'))}   ${pc.dim('Autonomous CLI Agent')}           ${b('│')}
+${b('│')}   ${pc.cyan(pc.bold('/ __  / __ `/ ___/ __ \\/ _ \\ / / '))}  ${pc.dim('Powered by Web LLMs')}            ${b('│')}
+${b('│')}  ${pc.cyan(pc.bold('/ /_/ / /_/ / /  / / / /  __// /  '))}                                 ${b('│')}
+${b('│')} ${pc.cyan(pc.bold('/_____/\\__,_/_/  /_/ /_/\\___//_/   '))}  ${pc.magenta(pc.bold('OpenCode & Claude Engine'))}       ${b('│')}
+${b('│')}                                                                          ${b('│')}
+${b('├' + '─'.repeat(74) + '┤')}
+${b('│')} ${g('📁 Workspace :')} ${pc.bold(dirName)} ${pc.dim(`(${workdir})`)}
+${b('│')} ${g('💬 Sesión    :')} ${pc.cyan(sessionInfo)}
+${b('│')} ${g('🛡️  Modo      :')} ${modeBadge} ${pc.dim('(usa /auto para alternar)')}
+${b('│')} ${g('👑 Líder     :')} ${pc.bold(pc.cyan(leaderName))}
+${b('│')} ${g('👥 Workers   :')} ${pc.yellow(workersStr || 'Ninguno activo')} ${pc.dim('(usa /config)')}
+${b('├' + '─'.repeat(74) + '┤')}
+${b('│')} ${g('💡 Atajos    :')} ${pc.cyan('/workers')} ${pc.dim('análisis')} │ ${pc.cyan('/resume')} ${pc.dim('historial')} │ ${pc.cyan('/new')} ${pc.dim('nueva sesión')} │ ${pc.cyan('/help')}
+${b('╰' + '─'.repeat(74) + '╯')}
 `);
   }
 
