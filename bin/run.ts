@@ -14,6 +14,11 @@ import { logger } from '../src/utils/logger.js';
 import { execSync } from 'node:child_process';
 import { getBarhelVersion } from '../src/utils/version.js';
 import { TUI } from '../src/cli/tui.js';
+import { CodeGraphEngine } from '../src/codegraph/CodeGraphEngine.js';
+import { SkillManager } from '../src/skills/SkillManager.js';
+import { TelegramBot } from '../src/daemon/TelegramBot.js';
+import { DaemonManager } from '../src/daemon/DaemonManager.js';
+import { ProgressSupervisor } from '../src/engine/ProgressSupervisor.js';
 
 const program = new Command();
 
@@ -329,6 +334,137 @@ program
 
     console.log('\n' + (allOk ? pc.green('✔ Todos los selectores están operativos.') : pc.yellow('⚠ Hay selectores rotos o proveedores sin sesión. Revisa barhel login.')));
     console.log();
+  });
+
+// Subcomando: CodeGraph - Análisis AST y Grafo de Símbolos
+program
+  .command('codegraph [query]')
+  .description('Analiza e indexa en memoria el grafo de símbolos y dependencias AST del repositorio')
+  .option('-w, --workdir <path>', 'Directorio de trabajo', process.cwd())
+  .action(async (query, options) => {
+    const engine = new CodeGraphEngine(options.workdir);
+    logger.startSpinner('Escaneando repositorio e indexando símbolos AST...');
+    await engine.scan();
+    logger.stopSpinner();
+
+    if (query) {
+      const info = engine.inspectSymbol(query);
+      if (!info.includes('no encontrado')) {
+        console.log(`\n${info}\n`);
+      } else {
+        const matches = engine.search(query);
+        if (matches.length > 0) {
+          console.log(pc.bold(`\nSímbolos coincidentes con "${query}":`));
+          for (const m of matches.slice(0, 25)) {
+            console.log(`  ${pc.cyan(`[${m.kind}]`)} ${pc.white(m.name)} ${pc.dim(`(${m.file}:${m.line})`)}`);
+          }
+          console.log();
+        } else {
+          console.log(pc.yellow(`No se encontraron símbolos para "${query}".`));
+        }
+      }
+    } else {
+      console.log(`\n${engine.getHierarchy()}\n`);
+    }
+  });
+
+// Subcomando: Gestión de Skills
+program
+  .command('skill <action> [target]')
+  .description('Instala, lista o inspecciona skills estilo Claude Code (install <url> | list | info <nombre>)')
+  .action(async (action, target) => {
+    const act = action.toLowerCase();
+    if (act === 'install') {
+      if (!target) {
+        logger.error('Debes proporcionar la URL de la skill. Ej: barhel skill install https://github.com/.../SKILL.md');
+        process.exit(1);
+      }
+      try {
+        const def = await SkillManager.installFromUrl(target);
+        logger.success(`Skill "${def.meta.name}" instalada con éxito.`);
+      } catch (err: any) {
+        logger.error(`Error al instalar skill: ${err?.message || err}`);
+        process.exit(1);
+      }
+    } else if (act === 'list') {
+      const skills = SkillManager.listSkills();
+      console.log(pc.bold('\nSkills instaladas:'));
+      if (skills.length === 0) {
+        console.log(pc.dim('  (No hay skills instaladas aún)'));
+      } else {
+        for (const s of skills) {
+          console.log(`  ${pc.green('•')} ${pc.bold(s.meta.name)}: ${s.meta.description}`);
+        }
+      }
+      console.log();
+    } else {
+      const skill = SkillManager.getSkill(target || action);
+      if (skill) {
+        console.log(pc.bold(`\n[SKILL: ${skill.meta.name}]`));
+        console.log(pc.dim(`Descripción: ${skill.meta.description}`));
+        console.log(pc.gray('──────────────────────────────────────────────'));
+        console.log(skill.instructions);
+        console.log(pc.gray('──────────────────────────────────────────────\n'));
+      } else {
+        logger.error(`Skill "${target || action}" no encontrada.`);
+      }
+    }
+  });
+
+// Subcomando: Telegram Bridge & Daemon
+program
+  .command('telegram')
+  .description('Inicia el bot de Telegram de Barhel para control remoto y notificaciones')
+  .option('-t, --token <token>', 'Token del bot de Telegram')
+  .option('-w, --workdir <path>', 'Directorio de trabajo', process.cwd())
+  .action(async (options) => {
+    const cfg = ConfigManager.loadConfig() || { leader: 'deepseek', workers: [] };
+    const token = options.token || cfg.telegramToken;
+
+    if (!token) {
+      logger.error('No se configuró el Token de Telegram. Usa: barhel telegram -t <tu-token> o /telegram en el chat.');
+      process.exit(1);
+    }
+
+    if (options.token) {
+      cfg.telegramToken = options.token;
+      ConfigManager.saveConfig(cfg);
+    }
+
+    const orchestrator = new Orchestrator({
+      workdir: options.workdir,
+      leader: cfg.leader,
+      workers: cfg.workers,
+      autonomous: true, // Telegram funciona en modo autónomo remoto
+    });
+
+    await orchestrator.initSession();
+
+    const bot = new TelegramBot(token, cfg.allowedChatIds || []);
+    bot.setOrchestrator(orchestrator);
+    await bot.start();
+  });
+
+// Subcomando: Daemon en segundo plano
+program
+  .command('daemon [action]')
+  .description('Inicia, detiene o consulta el daemon en segundo plano (start | stop | status)')
+  .option('-w, --workdir <path>', 'Directorio de trabajo', process.cwd())
+  .action((action, options) => {
+    const act = (action || 'status').toLowerCase();
+    if (act === 'start') {
+      DaemonManager.startDaemon(options.workdir);
+    } else if (act === 'stop') {
+      DaemonManager.stopDaemon();
+    } else {
+      const status = DaemonManager.getStatus();
+      if (status.running) {
+        console.log(pc.green(`\n✔ [DAEMON ACTIVO] PID: ${status.pid}`));
+        console.log(pc.dim(`  Logs: ${status.logPath}\n`));
+      } else {
+        console.log(pc.dim('\n[DAEMON INACTIVO] Usa: barhel daemon start\n'));
+      }
+    }
   });
 
 program.parse(process.argv);

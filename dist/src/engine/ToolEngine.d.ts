@@ -1,4 +1,5 @@
 import { ActionPayload, ToolResult } from '../types/actions.js';
+import { CodeGraphEngine } from '../codegraph/CodeGraphEngine.js';
 export interface CommandPolicy {
     deny: string[];
     allow: string[];
@@ -8,9 +9,11 @@ export declare class ToolEngine {
     private autonomous;
     private planOnly;
     private policies;
+    private codegraphEngine;
     private readonly IGNORED_DIRS;
     private workdirReal;
     constructor(workdir?: string, autonomous?: boolean, policies?: Partial<CommandPolicy>);
+    getCodeGraph(): CodeGraphEngine;
     getWorkdir(): string;
     setAutonomous(autonomous: boolean): void;
     setPlanOnly(planOnly: boolean): void;
@@ -65,4 +68,12 @@ export declare class ToolEngine {
      * de symlinks/junctions. Lanza un error si intenta escapar.
      */
     private assertInsideWorkdir;
+    /**
+     * Ejecuta consultas rápidas en el grafo de código (CodeGraph)
+     */
+    private executeCodeGraph;
+    /**
+     * Carga y activa las instrucciones de una Skill instalada
+     */
+    private executeSkill;
 }

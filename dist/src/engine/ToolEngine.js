@@ -6,6 +6,8 @@ import { createTwoFilesPatch } from 'diff';
 import pc from 'picocolors';
 import { logger } from '../utils/logger.js';
 import { execAsync } from '../utils/exec.js';
+import { CodeGraphEngine } from '../codegraph/CodeGraphEngine.js';
+import { SkillManager } from '../skills/SkillManager.js';
 const DEFAULT_DENY_PATTERNS = [
     'rm\\s+-(?:rf|r\\s+f|f\\s+r|fr)\\b',
     'mkfs(?:\\.\\w+)?\\b',
@@ -20,6 +22,7 @@ export class ToolEngine {
     autonomous;
     planOnly;
     policies;
+    codegraphEngine;
     IGNORED_DIRS = new Set([
         'node_modules',
         '.git',
@@ -41,6 +44,10 @@ export class ToolEngine {
             deny: [...DEFAULT_DENY_PATTERNS, ...(policies?.deny ?? [])],
             allow: policies?.allow ?? [],
         };
+        this.codegraphEngine = new CodeGraphEngine(this.workdir);
+    }
+    getCodeGraph() {
+        return this.codegraphEngine;
     }
     getWorkdir() {
         return this.workdir;
@@ -74,6 +81,10 @@ export class ToolEngine {
                     return await this.glob(action.pattern, action.path);
                 case 'check':
                     return await this.check();
+                case 'codegraph':
+                    return await this.executeCodeGraph(action.symbol, action.query);
+                case 'use_skill':
+                    return await this.executeSkill(action.skill);
                 case 'finish':
                     return {
                         success: true,
@@ -543,6 +554,78 @@ export class ToolEngine {
         if (relCheck(this.workdirReal, real)) {
             throw new Error(`Ruta fuera del workspace vía symlink: "${original || resolved}"`);
         }
+    }
+    /**
+     * Ejecuta consultas rápidas en el grafo de código (CodeGraph)
+     */
+    async executeCodeGraph(symbol, query) {
+        try {
+            await this.codegraphEngine.ensureLoaded();
+            if (symbol) {
+                const info = this.codegraphEngine.inspectSymbol(symbol);
+                return {
+                    success: true,
+                    output: info,
+                };
+            }
+            if (query) {
+                const results = this.codegraphEngine.search(query);
+                if (results.length === 0) {
+                    return {
+                        success: true,
+                        output: `No se encontraron símbolos para la búsqueda "${query}".`,
+                    };
+                }
+                const lines = results.slice(0, 30).map((s) => `• [${s.kind}] ${s.name} (${s.file}:${s.line})`);
+                return {
+                    success: true,
+                    output: `Resultados en CodeGraph (${results.length}):\n${lines.join('\n')}`,
+                };
+            }
+            const hierarchy = this.codegraphEngine.getHierarchy();
+            return {
+                success: true,
+                output: hierarchy,
+            };
+        }
+        catch (err) {
+            return {
+                success: false,
+                error: `Error en CodeGraph: ${err?.message || err}`,
+                output: `Error al consultar CodeGraph: ${err?.message || err}`,
+            };
+        }
+    }
+    /**
+     * Carga y activa las instrucciones de una Skill instalada
+     */
+    async executeSkill(skillName) {
+        if (!skillName) {
+            const skills = SkillManager.listSkills();
+            if (skills.length === 0) {
+                return {
+                    success: true,
+                    output: 'No hay skills instaladas actualmente. Instala una con: /skill install <url>',
+                };
+            }
+            const list = skills.map((s) => `• ${s.meta.name}: ${s.meta.description}`).join('\n');
+            return {
+                success: true,
+                output: `Skills disponibles:\n${list}`,
+            };
+        }
+        const skill = SkillManager.getSkill(skillName);
+        if (!skill) {
+            return {
+                success: false,
+                error: `Skill "${skillName}" no encontrada.`,
+                output: `Skill "${skillName}" no está instalada. Usa: /skill install <url>`,
+            };
+        }
+        return {
+            success: true,
+            output: `[SKILL ACTIVADA: ${skill.meta.name}]\n${skill.instructions}`,
+        };
     }
 }
 //# sourceMappingURL=ToolEngine.js.map

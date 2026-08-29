@@ -7,6 +7,8 @@ export class ResponseParser {
         'grep',
         'glob',
         'check',
+        'codegraph',
+        'use_skill',
         'delegate_task',
         'delegate_batch',
         'finish',

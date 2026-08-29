@@ -181,6 +181,12 @@ Durante tu conversación en Barhel, puedes usar comandos especiales con `/`:
 | Comando | Descripción |
 | :--- | :--- |
 | `/help` | Muestra la lista de comandos disponibles |
+| `/codegraph [simbolo]` | 🕸️ **CodeGraph en Memoria:** Muestra el grafo de arquitectura AST, funciones, clases y relaciones de llamadas en milisegundos |
+| `/skills` | ⚡ **Lista de Skills:** Muestra las habilidades instaladas al estilo Claude Code |
+| `/skill install <url>` | 📥 **Instalar Skill:** Descarga e instala automáticamente una skill desde GitHub/URL |
+| `/progress` o `/supervise` | 📊 **Supervisión de Agentes:** Muestra el porcentaje de avance (%) en tiempo real del Líder y Workers |
+| `/telegram [token]` | 🤖 **Telegram Bot Bridge:** Conecta Barhel con tu bot de Telegram para control y notificaciones |
+| `/daemon [start\|stop\|status]` | ⚙️ **Modo Segundo Plano:** Controla el proceso de Barhel ejecutándose como daemon |
 | `/workers` o `/analysis` | 🔍 **Inspector de Workers:** Abre el modal interactivo para leer el análisis y razonamiento completo de los agentes secundarios |
 | `/think` o `/thinking` | 💭 **Modo de Razonamiento:** Alterna entre el bloque visual completo estilo Claude Code o una sola línea compacta |
 | `/resume` o `/history` | Abre el selector visual para saltar a una sesión anterior con todo su contexto |

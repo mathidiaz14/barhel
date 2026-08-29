@@ -8,6 +8,8 @@ import { HistoryManager } from '../utils/history.js';
 import { getSessionBasePath } from '../utils/session.js';
 import { gitCommit, gitDiff, gitStatus } from '../utils/git.js';
 import { TUI } from '../cli/tui.js';
+import { ProgressSupervisor } from './ProgressSupervisor.js';
+import { SkillManager } from '../skills/SkillManager.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import pc from 'picocolors';
@@ -261,6 +263,7 @@ export class Orchestrator {
         try {
             await this.leaderDriver.init(this.options.headless, this.currentSession.chatUrl);
             this.isInitialized = true;
+            ProgressSupervisor.registerAgent(this.leaderId, leaderName, 'leader');
             logger.stopSpinner();
             logger.success(`Barhel está listo con Agente Líder [${leaderName}].`);
         }
@@ -284,6 +287,7 @@ export class Orchestrator {
         logger.info(`Inicializando worker secundario [${displayName}]...`);
         await driver.init(this.options.headless);
         this.workerDrivers.set(key, driver);
+        ProgressSupervisor.registerAgent(key, displayName, 'worker');
         return driver;
     }
     isTurnRunning = false;
@@ -426,6 +430,7 @@ export class Orchestrator {
                     this.currentTodos = parseResult.data.todos;
                     currentTurnRecord.todos = this.currentTodos;
                     this.currentSession.todos = this.currentTodos;
+                    ProgressSupervisor.setTodos(this.currentTodos);
                     TUI.renderTodoList(this.currentTodos);
                 }
                 // Mostrar acción a ejecutar con diff coloreado si es modificación de código
@@ -698,12 +703,13 @@ export class Orchestrator {
         const summaryNote = this.currentSession.summary
             ? `\nCONTEXTO DE MEMORIA DE SESIONES ANTERIORES:\n${this.currentSession.summary}\n`
             : '';
+        const skillsPrompt = SkillManager.buildSkillsSystemPrompt();
         return `ERES BARHEL (${leaderName}), UN ASISTENTE DE CODIFICACIÓN CLI AUTÓNOMO Y AVANZADO (ESTILO OPENCODE / CLAUDE CODE).
 Tu objetivo es resolver la siguiente instrucción del usuario en su proyecto local:
 "${userGoal}"
 
 DIRECTORIO DE TRABAJO: ${this.toolEngine.getWorkdir()}
-${planOnlyNote}${summaryNote}
+${planOnlyNote}${summaryNote}${skillsPrompt}
 PROTOCOLO DE ACCIÓN REACT OBLIGATORIO:
 Debes responder SIEMPRE Y EXCLUSIVAMENTE con un único bloque JSON válido:
 
@@ -717,11 +723,14 @@ Debes responder SIEMPRE Y EXCLUSIVAMENTE con un único bloque JSON válido:
     { "task": "Ejecutar pruebas y validar compilación", "status": "pending", "assignedTo": "leader" }
   ],
   "action": {
-    "type": "read_file" | "write_file" | "run_command" | "list_directory" | "grep" | "glob" | "check" | "delegate_task" | "delegate_batch" | "finish",
+    "type": "read_file" | "write_file" | "run_command" | "list_directory" | "grep" | "glob" | "check" | "codegraph" | "use_skill" | "delegate_task" | "delegate_batch" | "finish",
     "path": "ruta/relativa/archivo",
     "content": "contenido completo del archivo en UTF-8",
     "command": "comando terminal a ejecutar",
     "pattern": "patrón regex (grep) o glob (glob)",
+    "symbol": "nombre_simbolo (para codegraph)",
+    "query": "termino de busqueda (para codegraph)",
+    "skill": "nombre_skill (para use_skill)",
     "agent": "${workersListStr}",
     "prompt": "instrucción para el worker secundario",
     "tasks": [
@@ -740,21 +749,30 @@ PLAN DE TAREAS DINÁMICO (TODO LIST):
 - Actualiza este listado en cada respuesta marcando "completed" lo terminado y "in_progress" lo que estás ejecutando.
 
 HERRAMIENTAS DISPONIBLES:
-1. "list_directory": Explora la estructura de archivos del proyecto.
-2. "read_file": Lee archivos de código fuente existentes.
-3. "write_file": Crea o sobrescribe archivos de código completos y funcionales (sin "// TODO").
-4. "run_command": Ejecuta comandos de terminal (pruebas, npm, git, compiladores).
-5. "grep": Busca coincidencias de un patrón regex en los archivos (usa "pattern"; "path" opcional).
-6. "glob": Lista archivos/entradas por patrón glob (usa "pattern"; "path" opcional).
-7. "check": Ejecuta el chequeo del proyecto (typecheck → lint → build, el primero disponible).
-8. "delegate_task": Delega UNA tarea secundaria a un worker (${workersListStr}).
-9. "delegate_batch": Delega VARIAS tareas a varios workers EN PARALELO con "tasks": [{ "agent": "...", "prompt": "..." }].
-10. "finish": Concluye cuando el objetivo del usuario esté 100% completado y verificado.
+1. "codegraph": Consulta instantáneamente el grafo de símbolos AST (clases, funciones, quién llama a quién). Usa "symbol" para inspeccionar un símbolo, "query" para buscar, o sin parámetros para ver la jerarquía completa sin gastar tokens abriendo archivos.
+2. "use_skill": Activa una metodología o habilidad especializada instalada (usa "skill": "nombre").
+3. "list_directory": Explora la estructura de archivos del proyecto.
+4. "read_file": Lee archivos de código fuente existentes.
+5. "write_file": Crea o sobrescribe archivos de código completos y funcionales (sin "// TODO").
+6. "run_command": Ejecuta comandos de terminal (pruebas, npm, git, compiladores).
+7. "grep": Busca coincidencias de un patrón regex en los archivos (usa "pattern"; "path" opcional).
+8. "glob": Lista archivos/entradas por patrón glob (usa "pattern"; "path" opcional).
+9. "check": Ejecuta el chequeo del proyecto (typecheck → lint → build, el primero disponible).
+10. "delegate_task": Delega UNA tarea secundaria a un worker (${workersListStr}).
+11. "delegate_batch": Delega VARIAS tareas a varios workers EN PARALELO con "tasks": [{ "agent": "...", "prompt": "..." }].
+12. "finish": Concluye cuando el objetivo del usuario esté 100% completado y verificado.
+
+DELEGACIÓN AUTÓNOMA INTELIGENTE:
+- Si la instrucción es compleja o requiere múltiples análisis, DELEGA DE FORMA AUTÓNOMA en paralelo sin esperar a que el usuario te lo pida:
+  • Claude: Refactorización profunda, arquitectura limpia y auditoría de bugs.
+  • DeepSeek: Lógica matemática, algoritmos y orquestación principal.
+  • ChatGPT: Suites de pruebas unitarias (Vitest, Jest), documentación y scripts.
+  • Gemini: Búsqueda rápida de contexto y análisis de múltiples dependencias.
 
 Consejos:
+- Usa "codegraph" primero para entender la arquitectura del proyecto en 1 paso antes de leer archivos.
 - Usa grep/glob para encontrar código antes de leer archivos grandes.
 - Ejecuta "check" tras escribir código para validar tipos/lint.
-- Prefiere "write_file" sobre "read_file"+modificaciones manuales grandes.
 - En "delegate_batch", si un worker falla igual debes continuar con el resto.
 
 Comienza analizando el proyecto y decidiendo la primera acción en JSON.`;

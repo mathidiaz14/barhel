@@ -22,6 +22,9 @@ export interface BarhelConfig {
   autoSummarize?: boolean;
   autoCommit?: boolean;
   checkCommands?: string[];
+  telegramToken?: string;
+  telegramChatId?: string;
+  allowedChatIds?: number[];
 }
 
 const CONFIG_DIR = path.join(os.homedir(), '.dev-agent-sessions');

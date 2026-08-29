@@ -7,6 +7,8 @@ import pc from 'picocolors';
 import { ActionPayload, ToolResult } from '../types/actions.js';
 import { logger } from '../utils/logger.js';
 import { execAsync } from '../utils/exec.js';
+import { CodeGraphEngine } from '../codegraph/CodeGraphEngine.js';
+import { SkillManager } from '../skills/SkillManager.js';
 
 export interface CommandPolicy {
   deny: string[];
@@ -27,6 +29,7 @@ export class ToolEngine {
   private autonomous: boolean;
   private planOnly: boolean;
   private policies: CommandPolicy;
+  private codegraphEngine: CodeGraphEngine;
 
   private readonly IGNORED_DIRS = new Set([
     'node_modules',
@@ -51,6 +54,11 @@ export class ToolEngine {
       deny: [...DEFAULT_DENY_PATTERNS, ...(policies?.deny ?? [])],
       allow: policies?.allow ?? [],
     };
+    this.codegraphEngine = new CodeGraphEngine(this.workdir);
+  }
+
+  public getCodeGraph(): CodeGraphEngine {
+    return this.codegraphEngine;
   }
 
   public getWorkdir(): string {
@@ -95,6 +103,12 @@ export class ToolEngine {
 
         case 'check':
           return await this.check();
+
+        case 'codegraph':
+          return await this.executeCodeGraph(action.symbol, action.query);
+
+        case 'use_skill':
+          return await this.executeSkill(action.skill);
 
         case 'finish':
           return {
@@ -597,5 +611,80 @@ export class ToolEngine {
     if (relCheck(this.workdirReal, real)) {
       throw new Error(`Ruta fuera del workspace vía symlink: "${original || resolved}"`);
     }
+  }
+
+  /**
+   * Ejecuta consultas rápidas en el grafo de código (CodeGraph)
+   */
+  private async executeCodeGraph(symbol?: string, query?: string): Promise<ToolResult> {
+    try {
+      await this.codegraphEngine.ensureLoaded();
+      if (symbol) {
+        const info = this.codegraphEngine.inspectSymbol(symbol);
+        return {
+          success: true,
+          output: info,
+        };
+      }
+      if (query) {
+        const results = this.codegraphEngine.search(query);
+        if (results.length === 0) {
+          return {
+            success: true,
+            output: `No se encontraron símbolos para la búsqueda "${query}".`,
+          };
+        }
+        const lines = results.slice(0, 30).map((s) => `• [${s.kind}] ${s.name} (${s.file}:${s.line})`);
+        return {
+          success: true,
+          output: `Resultados en CodeGraph (${results.length}):\n${lines.join('\n')}`,
+        };
+      }
+      const hierarchy = this.codegraphEngine.getHierarchy();
+      return {
+        success: true,
+        output: hierarchy,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        error: `Error en CodeGraph: ${err?.message || err}`,
+        output: `Error al consultar CodeGraph: ${err?.message || err}`,
+      };
+    }
+  }
+
+  /**
+   * Carga y activa las instrucciones de una Skill instalada
+   */
+  private async executeSkill(skillName?: string): Promise<ToolResult> {
+    if (!skillName) {
+      const skills = SkillManager.listSkills();
+      if (skills.length === 0) {
+        return {
+          success: true,
+          output: 'No hay skills instaladas actualmente. Instala una con: /skill install <url>',
+        };
+      }
+      const list = skills.map((s) => `• ${s.meta.name}: ${s.meta.description}`).join('\n');
+      return {
+        success: true,
+        output: `Skills disponibles:\n${list}`,
+      };
+    }
+
+    const skill = SkillManager.getSkill(skillName);
+    if (!skill) {
+      return {
+        success: false,
+        error: `Skill "${skillName}" no encontrada.`,
+        output: `Skill "${skillName}" no está instalada. Usa: /skill install <url>`,
+      };
+    }
+
+    return {
+      success: true,
+      output: `[SKILL ACTIVADA: ${skill.meta.name}]\n${skill.instructions}`,
+    };
   }
 }

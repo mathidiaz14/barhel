@@ -12,8 +12,19 @@ import { HistoryManager } from '../utils/history.js';
 import { TUI } from './tui.js';
 import { CLIOptions } from '../types/actions.js';
 import { execSync } from 'node:child_process';
+import { CodeGraphEngine } from '../codegraph/CodeGraphEngine.js';
+import { SkillManager } from '../skills/SkillManager.js';
+import { ProgressSupervisor } from '../engine/ProgressSupervisor.js';
+import { TelegramBot } from '../daemon/TelegramBot.js';
+import { DaemonManager } from '../daemon/DaemonManager.js';
 
 const AVAILABLE_SLASH_COMMANDS = [
+  { name: '/codegraph', desc: 'Mapa de arquitectura AST y búsqueda de símbolos en memoria', needsArg: 'Símbolo o consulta (opcional):', optionalArg: true },
+  { name: '/skills', desc: 'Lista las skills instaladas estilo Claude Code' },
+  { name: '/skill', desc: 'Instala o inspecciona una skill (ej: /skill install <url>)', needsArg: 'Comando o URL de la skill:' },
+  { name: '/progress', desc: 'Supervisión en vivo y avance (%) de los agentes', aliases: ['/supervise'] },
+  { name: '/telegram', desc: 'Configura o inicia el bot de Telegram en segundo plano', needsArg: 'Token de Telegram (opcional):', optionalArg: true },
+  { name: '/daemon', desc: 'Inicia, detiene o revisa el estado del daemon (start/stop/status)', needsArg: 'Acción (start/stop/status):', optionalArg: true },
   { name: '/workers', desc: 'Inspector de analisis de agentes secundarios (Claude, ChatGPT, etc.)', aliases: ['/analysis', '/inspect'] },
   { name: '/think', desc: 'Alterna modo de razonamiento (resumido / extendido)', aliases: ['/thinking'] },
   { name: '/resume', desc: 'Reanuda una sesion anterior con todo su contexto', aliases: ['/history'] },
@@ -121,6 +132,125 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
   // Funcion ejecutora de comandos
   const runCommand = async (command: string, arg: string): Promise<void> => {
     switch (command) {
+      case '/codegraph': {
+        const codeGraph = new CodeGraphEngine(workdir);
+        logger.startSpinner('Consultando CodeGraph en memoria...');
+        await codeGraph.ensureLoaded();
+        logger.stopSpinner();
+
+        if (arg && arg.trim()) {
+          const query = arg.trim();
+          const info = codeGraph.inspectSymbol(query);
+          if (!info.includes('no encontrado')) {
+            console.log(`\n${info}\n`);
+          } else {
+            const matches = codeGraph.search(query);
+            if (matches.length > 0) {
+              console.log(pc.bold(`\nSímbolos coincidentes con "${query}":`));
+              for (const m of matches.slice(0, 20)) {
+                console.log(`  ${pc.cyan(`[${m.kind}]`)} ${pc.white(m.name)} ${pc.dim(`(${m.file}:${m.line})`)}`);
+              }
+              console.log();
+            } else {
+              console.log(pc.yellow(`No se encontraron símbolos para "${query}".`));
+            }
+          }
+        } else {
+          console.log(`\n${codeGraph.getHierarchy()}\n`);
+        }
+        break;
+      }
+
+      case '/skills': {
+        const skills = SkillManager.listSkills();
+        console.log(pc.bold('\nSkills instaladas (estilo Claude Code):'));
+        if (skills.length === 0) {
+          console.log(pc.dim('  (No hay skills instaladas aún. Instala una con: /skill install <url>)'));
+        } else {
+          for (const s of skills) {
+            console.log(`  ${pc.green('•')} ${pc.bold(s.meta.name)}: ${s.meta.description}`);
+          }
+        }
+        console.log();
+        break;
+      }
+
+      case '/skill': {
+        const parts = (arg || '').split(' ');
+        const sub = parts[0]?.toLowerCase();
+        const targetUrl = parts.slice(1).join(' ').trim();
+
+        if (sub === 'install' && targetUrl) {
+          try {
+            const installed = await SkillManager.installFromUrl(targetUrl);
+            console.log(pc.green(`[ok] Skill "${installed.meta.name}" instalada y lista para usarse.\n`));
+          } catch (err: any) {
+            console.log(pc.red(`Error al instalar skill: ${err?.message || err}`));
+          }
+        } else if (sub) {
+          const skill = SkillManager.getSkill(sub);
+          if (skill) {
+            console.log(pc.bold(`\n[SKILL: ${skill.meta.name}]`));
+            console.log(pc.dim(`Descripción: ${skill.meta.description}`));
+            console.log(pc.gray('──────────────────────────────────────────────'));
+            console.log(skill.instructions);
+            console.log(pc.gray('──────────────────────────────────────────────\n'));
+          } else {
+            console.log(pc.yellow(`Skill "${sub}" no encontrada. Usa: /skills o /skill install <url>`));
+          }
+        } else {
+          console.log(pc.yellow('Uso: /skill install <url>  o  /skill <nombre>'));
+        }
+        break;
+      }
+
+      case '/progress':
+      case '/supervise': {
+        console.log(`\n${ProgressSupervisor.formatProgressReport()}\n`);
+        break;
+      }
+
+      case '/telegram': {
+        const cfg = ConfigManager.loadConfig() || { leader: 'deepseek', workers: [] };
+        if (arg && arg.trim()) {
+          cfg.telegramToken = arg.trim();
+          ConfigManager.saveConfig(cfg);
+          console.log(pc.green(`[ok] Token de Telegram guardado.`));
+        }
+
+        if (!cfg.telegramToken) {
+          console.log(pc.yellow('\nConfiguración de Telegram:'));
+          console.log('Ingresa tu token de bot de Telegram (@BotFather):');
+          console.log(pc.cyan('  /telegram <tu-bot-token>\n'));
+          break;
+        }
+
+        console.log(pc.green(`\nToken configurado. Iniciando Telegram Bot Bridge...`));
+        const bot = new TelegramBot(cfg.telegramToken, cfg.allowedChatIds || []);
+        bot.setOrchestrator(orchestrator);
+        void bot.start();
+        console.log(pc.dim('Telegram Bot activo y escuchando en segundo plano.\n'));
+        break;
+      }
+
+      case '/daemon': {
+        const action = (arg || '').trim().toLowerCase();
+        if (action === 'start') {
+          const status = DaemonManager.startDaemon(workdir);
+          console.log(pc.green(`Daemon iniciado (PID: ${status.pid}).`));
+        } else if (action === 'stop') {
+          DaemonManager.stopDaemon();
+        } else {
+          const status = DaemonManager.getStatus();
+          if (status.running) {
+            console.log(pc.green(`\n[DAEMON ACTIVO] PID: ${status.pid} • Logs: ${status.logPath}\n`));
+          } else {
+            console.log(pc.dim('\n[DAEMON INACTIVO] Usa: /daemon start para iniciarlo en segundo plano.\n'));
+          }
+        }
+        break;
+      }
+
       case '/help':
         logger.printHelp();
         break;

@@ -17,7 +17,7 @@
     "start": "node dist/bin/run.js",
     "dev": "tsx bin/run.ts",
     "login": "tsx bin/run.ts login",
-    "test": "node --import tsx --test test/response-parser.test.ts test/toolengine.test.ts test/crypto.test.ts test/history.test.ts"
+    "test": "node --import tsx --test test/*.test.ts"
   },
   "keywords": [
     "barhel",

@@ -12,6 +12,9 @@ export interface BarhelConfig {
     autoSummarize?: boolean;
     autoCommit?: boolean;
     checkCommands?: string[];
+    telegramToken?: string;
+    telegramChatId?: string;
+    allowedChatIds?: number[];
 }
 export declare class ConfigManager {
     private static ensureDir;

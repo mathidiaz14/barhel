@@ -15,6 +15,8 @@ export type ActionType =
   | 'grep'
   | 'glob'
   | 'check'
+  | 'codegraph'
+  | 'use_skill'
   | 'delegate_task'
   | 'delegate_batch'
   | 'finish';
@@ -25,6 +27,9 @@ export interface ActionPayload {
   content?: string;
   command?: string;
   pattern?: string;
+  symbol?: string;
+  query?: string;
+  skill?: string;
   agent?: WorkerAgentType;
   prompt?: string;
   tasks?: DelegateTask[];
