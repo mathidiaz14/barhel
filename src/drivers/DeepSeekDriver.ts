@@ -23,15 +23,15 @@ export const DEEPSEEK_CONFIG: ProviderConfig = {
       '[contenteditable="true"]',
     ],
     sendButton: [
+      'div.ds-icon-button:has(svg)',
       'div[role="button"][aria-label*="Send"]',
       'div[role="button"][aria-label*="Enviar"]',
       'button[aria-label*="Send"]',
       'button[aria-label*="Enviar"]',
       'div[class*="send-button"]',
       'div[class*="send-btn"]',
-      'div.ds-icon-button:has(svg)',
+      'div[class*="send_button"]',
       'div.ds-icon-button',
-      'div[role="button"]:has(svg)',
       'button[type="submit"]',
       'button:has(svg)',
     ],
@@ -108,7 +108,7 @@ export class DeepSeekDriver extends BaseDriver {
     // Contar bloques de respuesta previos antes de enviar el nuevo turno
     const previousTurnCount = await this.countResponses();
 
-    // Rellenar prompt de forma nativa e invocar setter de React
+    // 2. Rellenar prompt e invocar setter nativo de React
     try {
       await inputLocator.fill(prompt);
     } catch {
@@ -129,8 +129,8 @@ export class DeepSeekDriver extends BaseDriver {
           } else {
             el.value = text;
           }
-          el.dispatchEvent(new Event('input', { bubbles: true }));
-          el.dispatchEvent(new Event('change', { bubbles: true }));
+          el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
         }
       },
       { sel: inputSelector, text: prompt }
@@ -138,32 +138,48 @@ export class DeepSeekDriver extends BaseDriver {
 
     await this.page.waitForTimeout(300);
 
-    // 2. Disparar envío: click en el botón de enviar, con Enter como fallback
-    await inputLocator.focus();
-    await this.page.waitForTimeout(200);
+    // 3. Disparar el envío:
+    // A) Clic vía JS en el botón de envío
+    await this.page.evaluate(() => {
+      const selectors = [
+        'div.ds-icon-button:has(svg)',
+        'div[role="button"][aria-label*="Send"]',
+        'div[role="button"][aria-label*="Enviar"]',
+        'div[class*="send"]',
+        'div.ds-icon-button',
+        'button[type="submit"]',
+      ];
+      for (const s of selectors) {
+        const btn = document.querySelector(s) as HTMLElement;
+        if (btn) {
+          btn.click();
+          break;
+        }
+      }
+    });
 
-    let sent = false;
-    const sendSelector = await this.findFirstVisibleSelector(this.config.selectors.sendButton);
-    if (sendSelector) {
+    // B) Clic vía Playwright locator force: true
+    for (const sel of this.config.selectors.sendButton) {
       try {
-        const sendBtn = this.page.locator(sendSelector).first();
-        if (await sendBtn.isEnabled({ timeout: 800 })) {
-          await sendBtn.click({ timeout: 400, force: true });
-          sent = true;
+        const sendBtn = this.page.locator(sel).first();
+        if (await sendBtn.isVisible({ timeout: 300 })) {
+          await sendBtn.click({ timeout: 500, force: true });
+          break;
         }
       } catch {
-        // Fallback a Enter
+        // Continuar
       }
     }
 
-    if (!sent) {
-      await inputLocator.press('Enter');
-    }
+    // C) Tecla Enter y Control+Enter
+    await inputLocator.focus().catch(() => {});
+    await inputLocator.press('Enter').catch(() => {});
+    await inputLocator.press('Control+Enter').catch(() => {});
 
-    // 3. Esperar generación y streaming del NUEVO turno
+    // 4. Esperar generación y streaming del NUEVO turno
     await this.waitForCompletion(previousTurnCount);
 
-    // 4. Extraer el texto de la última respuesta
+    // 5. Extraer el texto de la última respuesta
     const responseText = await this.extractLatestResponse();
     if (!responseText) {
       throw new Error('No se pudo extraer la respuesta de DeepSeek.');
