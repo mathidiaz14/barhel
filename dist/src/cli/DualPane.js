@@ -1,0 +1,119 @@
+import pc from 'picocolors';
+import path from 'node:path';
+import { getGitBranch } from '../utils/git.js';
+import { getBarhelVersion } from '../utils/version.js';
+/**
+ * Utilidad para calcular el ancho visual de un string ignorando secuencias ANSI de color
+ */
+export function visualLength(str) {
+    const ansiRegex = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g;
+    return str.replace(ansiRegex, '').length;
+}
+/**
+ * Rellena un string con espacios a la derecha hasta alcanzar el ancho visual deseado
+ */
+export function padRightVisual(str, targetWidth) {
+    const len = visualLength(str);
+    if (len >= targetWidth) {
+        const ansiRegex = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g;
+        const plain = str.replace(ansiRegex, '');
+        if (plain.length > targetWidth) {
+            return str.slice(0, targetWidth - 1) + '…';
+        }
+        return str;
+    }
+    return str + ' '.repeat(targetWidth - len);
+}
+export class DualPane {
+    static state = {
+        title: 'Sesión activa',
+        sessionId: 'nueva',
+        workdir: process.cwd(),
+        branch: '',
+        leaderName: 'DeepSeek',
+        leaderStatus: 'Inactivo',
+        workers: [],
+        autonomous: false,
+        planOnly: false,
+        todos: [],
+        metrics: {
+            turns: 0,
+            actions: 0,
+            filesRead: 0,
+            filesWritten: 0,
+            durationSec: 0,
+        },
+    };
+    static updateState(partial) {
+        this.state = {
+            ...this.state,
+            ...partial,
+            metrics: {
+                ...this.state.metrics,
+                ...(partial.metrics || {}),
+            },
+        };
+    }
+    static setTodos(todos) {
+        this.state.todos = todos;
+    }
+    static setLeaderStatus(status) {
+        this.state.leaderStatus = status;
+    }
+    static incrementAction(type) {
+        this.state.metrics.actions++;
+        if (type === 'read_file')
+            this.state.metrics.filesRead++;
+        if (type === 'write_file')
+            this.state.metrics.filesWritten++;
+    }
+    static incrementTurn() {
+        this.state.metrics.turns++;
+    }
+    /**
+     * Genera las líneas de la columna derecha con ancho proporcional y sin espacios vacíos gigantes
+     */
+    static buildRightPaneLines() {
+        const lines = [];
+        const dirBase = path.basename(this.state.workdir) || this.state.workdir;
+        const branchStr = this.state.branch || getGitBranch(this.state.workdir);
+        const branchTag = branchStr ? `:${branchStr}` : '';
+        const idBadge = `#${this.state.sessionId.slice(0, 8)}`;
+        const modeBadge = this.state.autonomous ? pc.green('autonomous') : pc.yellow('safe');
+        const version = getBarhelVersion();
+        const g = pc.dim;
+        const w = pc.white;
+        const cy = pc.cyan;
+        const wNames = this.state.workers.length > 0
+            ? this.state.workers.map((wrk) => wrk.name).join(', ')
+            : 'none';
+        lines.push(`${g('Session   :')} ${w(this.state.title)} ${g(`(${idBadge})`)}`);
+        lines.push(`${g('Workspace :')} ${w(dirBase)} ${g(`(${this.state.workdir}${branchTag})`)}`);
+        lines.push(`${g('Leader    :')} ${cy(this.state.leaderName)} ${g(`(${this.state.leaderStatus})`)}`);
+        lines.push(`${g('Workers   :')} ${pc.yellow(wNames)}`);
+        lines.push(`${g('Mode      :')} ${modeBadge} ${g('(/auto to toggle)')}`);
+        lines.push(`${g('Version   :')} ${w(`Barhel ${version}`)}`);
+        return lines;
+    }
+    /**
+     * Renderiza el marco dividido de dos columnas de forma perfectamente balanceada y sin espacios sobrantes
+     */
+    static renderSplitFrame(leftContentLines) {
+        const totalCols = process.stdout.columns || 120;
+        const leftWidth = 38; // Ancho exacto del logo ASCII de Barhel
+        const sep = pc.gray('│');
+        const rightLines = this.buildRightPaneLines();
+        const maxRows = Math.max(leftContentLines.length, rightLines.length);
+        for (let r = 0; r < maxRows; r++) {
+            const leftRaw = leftContentLines[r] || '';
+            const rightRaw = rightLines[r] || '';
+            const leftPadded = padRightVisual(leftRaw, leftWidth);
+            console.log(`  ${leftPadded}  ${sep}  ${rightRaw}`);
+        }
+        const dividerWidth = Math.min(totalCols - 4, 94);
+        console.log(`  ${pc.gray('─'.repeat(dividerWidth))}`);
+        console.log(`  ${pc.dim('Type')} ${pc.cyan('/')} ${pc.dim('for command palette')} ${pc.dim('•')} ${pc.cyan('/workers')} ${pc.dim('for analysis')} ${pc.dim('•')} ${pc.cyan('Tab')} ${pc.dim('to complete')} ${pc.dim('•')} ${pc.cyan('/help')}`);
+        console.log(`  ${pc.gray('─'.repeat(dividerWidth))}`);
+    }
+}
+//# sourceMappingURL=DualPane.js.map

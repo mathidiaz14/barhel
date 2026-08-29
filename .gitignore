@@ -1,5 +1,4 @@
 node_modules/
-dist/
 .dev-agent-sessions/
 *.log
 .DS_Store
