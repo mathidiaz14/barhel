@@ -82,7 +82,8 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
       leaderName,
       workersNames,
       orchestrator.getSessionTitle(),
-      orchestrator.getSessionId()
+      orchestrator.getSessionId(),
+      orchestrator.getSession().todos
     );
   };
 

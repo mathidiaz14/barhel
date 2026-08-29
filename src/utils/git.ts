@@ -8,6 +8,21 @@ export interface GitResult {
   error?: string;
 }
 
+export function getGitBranch(cwd: string): string {
+  try {
+    const headPath = path.join(cwd, '.git', 'HEAD');
+    if (fs.existsSync(headPath)) {
+      const head = fs.readFileSync(headPath, 'utf-8').trim();
+      const match = head.match(/ref: refs\/heads\/(.+)/);
+      if (match) return match[1];
+      return head.slice(0, 7);
+    }
+  } catch {
+    // Ignorar
+  }
+  return '';
+}
+
 async function runGit(cwd: string, args: string[]): Promise<GitResult> {
   if (!fs.existsSync(path.join(cwd, '.git'))) {
     return { success: false, stdout: '', error: 'No es un repositorio git.' };

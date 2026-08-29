@@ -5,6 +5,8 @@ import { createTwoFilesPatch } from 'diff';
 import { WorkerStore } from '../utils/workerStore.js';
 import { startSpinner, stopSpinner, updateSpinnerText, isSpinnerActive } from '../utils/spinner.js';
 import { getBarhelVersion } from '../utils/version.js';
+import { DualPane } from './DualPane.js';
+import { TodoItem } from '../types/actions.js';
 
 export class TUI {
   private static thinkingStartTime = 0;
@@ -25,6 +27,7 @@ export class TUI {
    */
   public static startThinking(modelName = 'Líder', customText?: string): void {
     this.stopThinking();
+    DualPane.setLeaderStatus('Pensando');
 
     this.thinkingStartTime = Date.now();
     const baseText = customText || `${modelName} pensando`;
@@ -43,6 +46,7 @@ export class TUI {
    * Actualiza el progreso de streaming en vivo con el número de caracteres recibidos
    */
   public static updateThinkingChunk(charCount: number, modelName = 'Líder'): void {
+    DualPane.setLeaderStatus('Generando');
     if (isSpinnerActive() && this.thinkingStartTime > 0) {
       const elapsedSec = ((Date.now() - this.thinkingStartTime) / 1000).toFixed(1);
       updateSpinnerText(`${pc.yellow('✻')} ${pc.dim(`${modelName} generando`)} ${pc.yellow(`(${elapsedSec}s • ${charCount} chars)`)}`);
@@ -53,6 +57,7 @@ export class TUI {
    * Detiene el spinner de pensamiento y retorna el tiempo transcurrido en ms
    */
   public static stopThinking(): number {
+    DualPane.setLeaderStatus('Inactivo');
     if (this.timerInterval) {
       clearInterval(this.timerInterval);
       this.timerInterval = null;
@@ -92,6 +97,7 @@ export class TUI {
    * Muestra de forma compacta y coloreada exactamente qué código se va a modificar y por cuál
    */
   public static renderDiff(relPath: string, oldContent: string | null, newContent: string): void {
+    DualPane.incrementAction('write_file');
     if (oldContent === null) {
       const lineCount = newContent.split('\n').length;
       console.log(`  ${pc.green('→')} ${pc.white('Crear nuevo archivo:')} ${pc.cyan(relPath)} ${pc.dim(`(${lineCount} líneas)`)}`);
@@ -131,6 +137,7 @@ export class TUI {
    */
   public static renderTodoList(todos: Array<{ task: string; status: string; assignedTo?: string }>): void {
     if (!todos || todos.length === 0) return;
+    DualPane.setTodos(todos as TodoItem[]);
 
     const completedCount = todos.filter((t) => (t.status || '').toLowerCase() === 'completed' || (t.status || '').toLowerCase() === 'done').length;
     const progressStr = `(${completedCount}/${todos.length} completadas)`;
@@ -165,6 +172,7 @@ export class TUI {
    */
   public static renderAction(type: string, details: Record<string, unknown>): void {
     this.stopThinking();
+    DualPane.incrementAction(type);
 
     switch (type) {
       case 'read_file':
@@ -368,9 +376,9 @@ export class TUI {
   }
 
   /**
-   * Pantalla principal de Barhel dividida en dos columnas:
-   * Columna Izquierda: Logo ASCII sobrio y descripción
-   * Columna Derecha: Panel de Información de Sesión y Contexto
+   * Pantalla principal de Barhel dividida en dos columnas ocupando todo el ancho de la consola:
+   * Columna Izquierda: Logo ASCII, bienvenida y flujo de conversación
+   * Columna Derecha: Panel de Sesión en vivo, Estado del Líder, Workers, Lista de Tareas y Métricas
    */
   public static renderBanner(
     workdir: string = process.cwd(),
@@ -378,18 +386,31 @@ export class TUI {
     leaderName = 'DeepSeek',
     workersStr = 'ChatGPT, Gemini',
     sessionTitle?: string,
-    sessionId?: string
+    sessionId?: string,
+    todos?: TodoItem[]
   ): void {
-    const dirName = path.basename(workdir) || workdir;
-    const modeBadge = autonomous ? pc.green('autonomous') : pc.yellow('safe');
     const sessionName = sessionTitle || 'Sesión de trabajo';
-    const idBadge = sessionId ? `#${sessionId.slice(0, 8)}` : '#nueva';
-    const version = getBarhelVersion();
+    const idStr = sessionId || 'nueva';
+
+    const workersList = (workersStr || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((name) => ({ name, status: 'Listo' }));
+
+    DualPane.updateState({
+      title: sessionName,
+      sessionId: idStr,
+      workdir,
+      leaderName,
+      leaderStatus: 'Inactivo',
+      workers: workersList,
+      autonomous,
+      todos: todos || [],
+    });
 
     const cy = pc.cyan;
     const g = pc.dim;
-    const w = pc.white;
-    const sep = pc.gray('│');
 
     const leftCol = [
       cy('    ____             __          __'),
@@ -398,29 +419,14 @@ export class TUI {
       cy(' / /_/ / /_/ / /  / / / /  __// /  '),
       cy('/_____/\\__,_/_/  /_/ /_/\\___//_/   '),
       g('Autonomous Multi-Model Coding Agent'),
-    ];
-
-    const rightCol = [
-      `${g('Session   :')} ${w(sessionName)} ${g(`(${idBadge})`)}`,
-      `${g('Workspace :')} ${w(dirName)} ${g(`(${workdir}:main)`)}`,
-      `${g('Leader    :')} ${cy(leaderName)}`,
-      `${g('Workers   :')} ${pc.yellow(workersStr || 'none')}`,
-      `${g('Mode      :')} ${modeBadge} ${g('(/auto to toggle)')}`,
-      `${g('Version   :')} ${w(`Barhel ${version}`)}`,
+      '',
+      g('────────────────────────────────────────'),
+      g('Escribe una instrucción o / para el menú'),
+      g('────────────────────────────────────────'),
     ];
 
     console.log();
-    const rows = Math.max(leftCol.length, rightCol.length);
-    for (let i = 0; i < rows; i++) {
-      const left = (leftCol[i] || '').padEnd(38);
-      const right = rightCol[i] || '';
-      console.log(`  ${left}  ${sep}  ${right}`);
-    }
-
-    console.log();
-    console.log(`  ${pc.gray('─'.repeat(88))}`);
-    console.log(`  ${g('Type')} ${cy('/')} ${g('for command palette')} ${g('•')} ${cy('/workers')} ${g('for analysis')} ${g('•')} ${cy('Tab')} ${g('to complete')} ${g('•')} ${cy('/help')}`);
-    console.log(`  ${pc.gray('─'.repeat(88))}`);
+    DualPane.renderSplitFrame(leftCol);
     console.log();
   }
 
