@@ -100,8 +100,10 @@ export class DeepSeekDriver extends BaseDriver {
       );
     }
 
+    await this.dismissModals();
+
     const inputLocator = this.page.locator(inputSelector).first();
-    await inputLocator.click();
+    await inputLocator.click({ force: true, timeout: 1500 }).catch(() => inputLocator.focus().catch(() => {}));
 
     // Contar bloques de respuesta previos antes de enviar el nuevo turno
     const previousTurnCount = await this.countResponses();

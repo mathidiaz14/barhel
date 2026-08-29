@@ -197,6 +197,44 @@ export abstract class BaseDriver {
     }
 
     this.currentChatUrl = afterUrl;
+    await this.dismissModals();
+  }
+
+  /**
+   * Cierra automáticamente popups, banners o modales que bloqueen la interfaz
+   */
+  public async dismissModals(): Promise<void> {
+    if (!this.page) return;
+    try {
+      await this.page.keyboard.press('Escape');
+      await this.page.evaluate(() => {
+        const closeSelectors = [
+          '.ds-modal-close',
+          'div.ds-modal-wrapper button',
+          'div[class*="modal"] button[aria-label*="Close"]',
+          'div[class*="modal"] button[aria-label*="Cerrar"]',
+          'div[class*="dialog"] button',
+          'button.ds-dialog-close',
+          'svg[class*="close"]',
+          '[data-testid="modal-close-button"]',
+          'div[role="dialog"] button',
+        ];
+        for (const sel of closeSelectors) {
+          const btn = document.querySelector(sel) as HTMLElement;
+          if (btn && typeof btn.click === 'function') {
+            btn.click();
+          }
+        }
+        // Remover wrappers de focus-lock si bloquean los eventos de ratón
+        document.querySelectorAll('.ds-modal-focus-lock, .ds-modal-wrapper').forEach((el) => {
+          if (!el.querySelector('form, textarea, input[type="password"]')) {
+            el.remove();
+          }
+        });
+      });
+    } catch {
+      // Ignorar errores
+    }
   }
 
   /**
