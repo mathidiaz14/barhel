@@ -129,6 +129,18 @@ barhel export <sessionId> --format json  # JSON crudo
 barhel export <sessionId> --out ./docs/  # carpeta de salida
 ```
 
+### Copia de seguridad y Migración Completa (backup/restore):
+Si deseas migrar todas tus sesiones de autenticación (cookies) e historiales de chat completos a otra computadora, puedes exportar e importar el directorio de sesiones completo:
+```bash
+# Exportar sesiones e historial a un archivo comprimido (.tar.gz):
+barhel backup
+# (O especificando un nombre personalizado)
+barhel backup mi-copia.tar.gz
+
+# Restaurar e importar en la nueva computadora:
+barhel restore barhel-backup-2026-08-29.tar.gz
+```
+
 ### Memoría a largo plazo
 Al cerrar (`finish` o `Ctrl+C`), Barhel resume automáticamente los turnos nuevos con el Líder y guarda el resumen en la sesión. Al reanudar, ese resumen se reinyecta como contexto (configurable con `autoSummarize` en `config.json`). Puedes generarlo manualmente con `/summarize`.
 
@@ -185,6 +197,8 @@ Durante tu conversación en Barhel, puedes usar comandos especiales con `/`:
 | `/fix [error]` | Pide al Líder que ejecute `check` y corrija los errores de tipo/lint |
 | `/summarize` | Genera el resumen de memoria de la sesión (memoria a largo plazo) |
 | `/export [json|md]` | Exporta la sesión actual a Markdown o JSON |
+| `/backup [archivo]` | Exporta todas las sesiones de autenticación e historial a un archivo `.tar.gz` |
+| `/restore <archivo>` | Importa sesiones de autenticación e historial desde un archivo `.tar.gz` |
 | `/status` | Comprueba el estado de las credenciales web guardadas |
 | `/login [proveedor]` | Inicia sesión en cualquier proveedor sin salir del chat |
 | `/clear` | Limpia la pantalla de la terminal |

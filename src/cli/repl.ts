@@ -5,12 +5,13 @@ import pc from 'picocolors';
 import { search, input as promptInput } from '@inquirer/prompts';
 import { Orchestrator } from '../engine/Orchestrator.js';
 import { logger } from '../utils/logger.js';
-import { listSessionsStatus } from '../utils/session.js';
+import { listSessionsStatus, getSessionBasePath } from '../utils/session.js';
 import { DriverFactory } from '../drivers/DriverFactory.js';
 import { ConfigManager } from '../utils/config.js';
 import { HistoryManager } from '../utils/history.js';
 import { TUI } from './tui.js';
 import { CLIOptions } from '../types/actions.js';
+import { execSync } from 'node:child_process';
 
 const AVAILABLE_SLASH_COMMANDS = [
   { name: '/workers', desc: 'Inspector de analisis de agentes secundarios (Claude, ChatGPT, etc.)', aliases: ['/analysis', '/inspect'] },
@@ -28,6 +29,8 @@ const AVAILABLE_SLASH_COMMANDS = [
   { name: '/explain', desc: 'Pide al lider que explique un simbolo o archivo', needsArg: 'Simbolo o archivo a explicar:' },
   { name: '/fix', desc: 'Pide al lider que analice y corrija errores del proyecto', needsArg: 'Descripcion del error (opcional):', optionalArg: true },
   { name: '/export', desc: 'Exporta la sesion actual a Markdown o JSON', needsArg: 'Formato (md/json) o ruta:', optionalArg: true },
+  { name: '/backup', desc: 'Exporta todas las sesiones de autenticación e historial a un archivo (.tar.gz)', needsArg: 'Ruta del archivo (opcional):', optionalArg: true },
+  { name: '/restore', desc: 'Importa sesiones de autenticación e historial desde un archivo (.tar.gz)', needsArg: 'Ruta del archivo:' },
   { name: '/summarize', desc: 'Genera y muestra el resumen de memoria de la sesion' },
   { name: '/leader', desc: 'Cambia el modelo lider rapidamente', needsArg: 'Nombre del modelo:' },
   { name: '/login', desc: 'Inicia sesion en la interfaz web de un proveedor' },
@@ -284,6 +287,51 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
           logger.success(`Sesion exportada: ${filePath}`);
         } catch (err) {
           logger.error(`No se pudo exportar: ${err}`);
+        }
+        break;
+      }
+
+      case '/backup': {
+        const defaultFilename = `barhel-backup-${new Date().toISOString().substring(0, 10)}.tar.gz`;
+        const targetFile = arg ? path.resolve(arg) : path.join(process.cwd(), defaultFilename);
+        const sessionDir = getSessionBasePath();
+        const parentDir = path.dirname(sessionDir);
+        const dirName = path.basename(sessionDir);
+
+        console.log(`\nExportando todas las sesiones y el historial a: ${targetFile}...`);
+        try {
+          if (!fs.existsSync(sessionDir)) {
+            console.log(pc.red('No hay sesiones existentes para exportar.'));
+            break;
+          }
+          execSync(`tar -czf "${targetFile}" -C "${parentDir}" "${dirName}"`);
+          console.log(pc.green(`Copia de seguridad exportada con éxito en: ${targetFile}\n`));
+        } catch (err) {
+          console.log(pc.red(`Error al exportar la copia de seguridad: ${err}`));
+        }
+        break;
+      }
+
+      case '/restore': {
+        if (!arg) {
+          console.log(pc.yellow('Uso: /restore <ruta del archivo .tar.gz>'));
+          break;
+        }
+        const targetFile = path.resolve(arg);
+        const sessionDir = getSessionBasePath();
+        const parentDir = path.dirname(sessionDir);
+
+        console.log(`\nImportando sesiones e historial desde: ${targetFile}...`);
+        try {
+          if (!fs.existsSync(targetFile)) {
+            console.log(pc.red(`El archivo de copia de seguridad no existe: ${targetFile}`));
+            break;
+          }
+          fs.mkdirSync(parentDir, { recursive: true });
+          execSync(`tar -xzf "${targetFile}" -C "${parentDir}"`);
+          console.log(pc.green(`Sesiones e historial importados con éxito.\n`));
+        } catch (err) {
+          console.log(pc.red(`Error al importar la copia de seguridad: ${err}`));
         }
         break;
       }

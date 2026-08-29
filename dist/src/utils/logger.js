@@ -51,6 +51,8 @@ class Logger {
         console.log(`  ${bold(yellow('/fix [error]'))}       ${dim('Run "check" and fix type/lint errors')}`);
         console.log(`  ${bold(yellow('/summarize'))}         ${dim('Generate session memory summary')}`);
         console.log(`  ${bold(yellow('/export [json|md]'))}  ${dim('Export current session')}`);
+        console.log(`  ${bold(yellow('/backup [file]'))}     ${dim('Export all browser sessions and history')}`);
+        console.log(`  ${bold(yellow('/restore <file>'))}    ${dim('Import browser sessions and history')}`);
         console.log(`  ${bold(yellow('/login [name]'))}      ${dim('Login to provider')}`);
         console.log(`  ${bold(yellow('/clear'))}             ${dim('Clear screen')}`);
         console.log(`  ${bold(yellow('/exit'))}              ${dim('Exit barhel')}`);
