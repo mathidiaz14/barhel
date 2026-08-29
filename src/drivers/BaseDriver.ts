@@ -100,7 +100,24 @@ export abstract class BaseDriver {
             channel: 'msedge',
           });
         } catch {
-          this.context = await chromium.launchPersistentContext(sessionDir, launchOptions);
+          try {
+            this.context = await chromium.launchPersistentContext(sessionDir, launchOptions);
+          } catch (err: any) {
+            const msg = String(err?.message || '');
+            if (msg.includes("Executable doesn't exist") || msg.includes('playwright install')) {
+              logger.info('Navegador Chromium no encontrado. Instalándolo automáticamente con Playwright...');
+              const { execSync } = await import('node:child_process');
+              try {
+                execSync('npx playwright install chromium', { stdio: 'inherit' });
+                this.context = await chromium.launchPersistentContext(sessionDir, launchOptions);
+              } catch (installErr) {
+                logger.error('No se pudo instalar Chromium automáticamente.', installErr);
+                throw err;
+              }
+            } else {
+              throw err;
+            }
+          }
         }
       }
 
