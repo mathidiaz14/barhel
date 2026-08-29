@@ -12,6 +12,7 @@
   ],
   "scripts": {
     "build": "tsc",
+    "prepare": "tsc",
     "prepublishOnly": "tsc",
     "browsers": "playwright install chromium",
     "start": "node dist/bin/run.js",
