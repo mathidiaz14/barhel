@@ -1,3 +1,4 @@
+import { ToolEngine } from './ToolEngine.js';
 import { CLIOptions } from '../types/actions.js';
 import { ChatSession } from '../utils/history.js';
 export declare class Orchestrator {
@@ -27,6 +28,7 @@ export declare class Orchestrator {
     getLeaderId(): string;
     getActiveWorkers(): string[];
     getWorkdir(): string;
+    getToolEngine(): ToolEngine;
     isAutonomous(): boolean;
     toggleAutonomous(): boolean;
     /**

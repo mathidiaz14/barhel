@@ -19,6 +19,7 @@ import { TelegramBot } from '../daemon/TelegramBot.js';
 import { DaemonManager } from '../daemon/DaemonManager.js';
 
 const AVAILABLE_SLASH_COMMANDS = [
+  { name: '/test', desc: 'Ejecuta o genera pruebas unitarias automáticas para el proyecto', needsArg: 'Archivo o filtro (opcional):', optionalArg: true },
   { name: '/graph', desc: 'Mapa de arquitectura AST y búsqueda de símbolos en memoria', aliases: ['/codegraph'], needsArg: 'Símbolo o consulta (opcional):', optionalArg: true },
   { name: '/skills', desc: 'Lista las skills instaladas estilo Claude Code' },
   { name: '/skill', desc: 'Instala o inspecciona una skill (ej: /skill install <url>)', needsArg: 'Comando o URL de la skill:' },
@@ -143,6 +144,23 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
   // Funcion ejecutora de comandos
   const runCommand = async (command: string, arg: string): Promise<void> => {
     switch (command) {
+      case '/test': {
+        const testSandbox = orchestrator.getToolEngine().getTestSandbox();
+        logger.startSpinner(`Ejecutando pruebas ${arg ? `para ${arg}` : 'del proyecto'}...`);
+        const result = await testSandbox.runProjectTests(arg ? arg.trim() : undefined);
+        logger.stopSpinner();
+        if (result.success) {
+          console.log(pc.green(`\n✔ [PRUEBAS EXITOSAS - ${result.durationMs}ms]:\n`));
+          console.log(result.output);
+        } else {
+          console.log(pc.red(`\n✖ [FALLARON LAS PRUEBAS - ${result.durationMs}ms]:\n`));
+          console.log(result.output);
+          console.log(pc.yellow('\nTip: Puedes pedirle a Barhel que las corrija escribiendo: "/fix"'));
+        }
+        console.log();
+        break;
+      }
+
       case '/graph':
       case '/codegraph': {
         const codeGraph = new CodeGraphEngine(workdir);

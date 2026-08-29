@@ -112,6 +112,9 @@ export class Orchestrator {
     getWorkdir() {
         return this.toolEngine.getWorkdir();
     }
+    getToolEngine() {
+        return this.toolEngine;
+    }
     isAutonomous() {
         return this.options.autonomous ?? false;
     }
@@ -723,11 +726,14 @@ Debes responder SIEMPRE Y EXCLUSIVAMENTE con un único bloque JSON válido:
     { "task": "Ejecutar pruebas y validar compilación", "status": "pending", "assignedTo": "leader" }
   ],
   "action": {
-    "type": "read_file" | "write_file" | "run_command" | "list_directory" | "grep" | "glob" | "check" | "codegraph" | "use_skill" | "delegate_task" | "delegate_batch" | "finish",
+    "type": "read_file" | "write_file" | "run_command" | "list_directory" | "grep" | "glob" | "check" | "eval_code" | "auto_test" | "codegraph" | "use_skill" | "delegate_task" | "delegate_batch" | "finish",
     "path": "ruta/relativa/archivo",
     "content": "contenido completo del archivo en UTF-8",
     "command": "comando terminal a ejecutar",
     "pattern": "patrón regex (grep) o glob (glob)",
+    "code": "código ejecutable con assertions para probar en sandbox (eval_code)",
+    "language": "typescript | javascript | python | php",
+    "targetFile": "ruta del archivo de prueba específico (para auto_test)",
     "symbol": "nombre_simbolo (para codegraph)",
     "query": "termino de busqueda (para codegraph)",
     "skill": "nombre_skill (para use_skill)",
@@ -749,18 +755,25 @@ PLAN DE TAREAS DINÁMICO (TODO LIST):
 - Actualiza este listado en cada respuesta marcando "completed" lo terminado y "in_progress" lo que estás ejecutando.
 
 HERRAMIENTAS DISPONIBLES:
-1. "codegraph": Consulta instantáneamente el grafo de símbolos AST (clases, funciones, quién llama a quién). Usa "symbol" para inspeccionar un símbolo, "query" para buscar, o sin parámetros para ver la jerarquía completa sin gastar tokens abriendo archivos.
-2. "use_skill": Activa una metodología o habilidad especializada instalada (usa "skill": "nombre").
-3. "list_directory": Explora la estructura de archivos del proyecto.
-4. "read_file": Lee archivos de código fuente existentes.
-5. "write_file": Crea o sobrescribe archivos de código completos y funcionales (sin "// TODO").
-6. "run_command": Ejecuta comandos de terminal (pruebas, npm, git, compiladores).
-7. "grep": Busca coincidencias de un patrón regex en los archivos (usa "pattern"; "path" opcional).
-8. "glob": Lista archivos/entradas por patrón glob (usa "pattern"; "path" opcional).
-9. "check": Ejecuta el chequeo del proyecto (typecheck → lint → build, el primero disponible).
-10. "delegate_task": Delega UNA tarea secundaria a un worker (${workersListStr}).
-11. "delegate_batch": Delega VARIAS tareas a varios workers EN PARALELO con "tasks": [{ "agent": "...", "prompt": "..." }].
-12. "finish": Concluye cuando el objetivo del usuario esté 100% completado y verificado.
+1. "eval_code": 🧪 EJECUCIÓN DE PRUEBAS EN SANDBOX: Ejecuta un script de prueba con assertions (en TypeScript/tsx, Python, etc.) en un entorno temporal aislado importando tu código recién programado para verificar que funciona exactamente como se espera.
+2. "auto_test": 🏃 RUNNER DE PRUEBAS DEL PROYECTO: Ejecuta las pruebas unitarias del repositorio (Vitest, Jest, PyTest, Node Test Runner, PHPUnit) de todo el proyecto o de un archivo específico ("targetFile").
+3. "codegraph": Consulta instantáneamente el grafo de símbolos AST (clases, funciones, quién llama a quién). Usa "symbol" para inspeccionar un símbolo, "query" para buscar, o sin parámetros para ver la jerarquía completa sin gastar tokens abriendo archivos.
+4. "use_skill": Activa una metodología o habilidad especializada instalada (usa "skill": "nombre").
+5. "list_directory": Explora la estructura de archivos del proyecto.
+6. "read_file": Lee archivos de código fuente existentes.
+7. "write_file": Crea o sobrescribe archivos de código completos y funcionales (sin "// TODO").
+8. "run_command": Ejecuta comandos de terminal (pruebas, npm, git, compiladores).
+9. "grep": Busca coincidencias de un patrón regex en los archivos (usa "pattern"; "path" opcional).
+10. "glob": Lista archivos/entradas por patrón glob (usa "pattern"; "path" opcional).
+11. "check": Ejecuta el chequeo del proyecto (typecheck → lint → build, el primero disponible).
+12. "delegate_task": Delega UNA tarea secundaria a un worker (${workersListStr}).
+13. "delegate_batch": Delega VARIAS tareas a varios workers EN PARALELO con "tasks": [{ "agent": "...", "prompt": "..." }].
+14. "finish": Concluye cuando el objetivo del usuario esté 100% completado y verificado.
+
+REGLA DE AUTO-VERIFICACIÓN OBLIGATORIA (PROBAR ANTES DE FINALIZAR):
+- ¡NUNCA des una tarea por finalizada sin haber comprobado tu código en ejecución!
+- Después de escribir o modificar código con "write_file", DEBES usar "eval_code" (para probar funciones con asserts), "auto_test" o "run_command" (npm test).
+- Si la prueba falla, analiza el error o stack trace, re-escribe el código con "write_file" y vuelve a probar hasta que pase al 100%. Solo cuando la prueba sea exitosa puedes llamar a "finish".
 
 DELEGACIÓN AUTÓNOMA INTELIGENTE:
 - Si la instrucción es compleja o requiere múltiples análisis, DELEGA DE FORMA AUTÓNOMA en paralelo sin esperar a que el usuario te lo pida:

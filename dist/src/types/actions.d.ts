@@ -4,7 +4,7 @@ export interface DelegateTask {
     agent: WorkerAgentType;
     prompt: string;
 }
-export type ActionType = 'read_file' | 'write_file' | 'run_command' | 'list_directory' | 'grep' | 'glob' | 'check' | 'codegraph' | 'use_skill' | 'delegate_task' | 'delegate_batch' | 'finish';
+export type ActionType = 'read_file' | 'write_file' | 'run_command' | 'list_directory' | 'grep' | 'glob' | 'check' | 'eval_code' | 'auto_test' | 'codegraph' | 'use_skill' | 'delegate_task' | 'delegate_batch' | 'finish';
 export interface ActionPayload {
     type: ActionType;
     path?: string;
@@ -14,6 +14,9 @@ export interface ActionPayload {
     symbol?: string;
     query?: string;
     skill?: string;
+    code?: string;
+    language?: string;
+    targetFile?: string;
     agent?: WorkerAgentType;
     prompt?: string;
     tasks?: DelegateTask[];

@@ -1,5 +1,6 @@
 import { ActionPayload, ToolResult } from '../types/actions.js';
 import { CodeGraphEngine } from '../codegraph/CodeGraphEngine.js';
+import { TestSandbox } from '../testing/TestSandbox.js';
 export interface CommandPolicy {
     deny: string[];
     allow: string[];
@@ -10,10 +11,12 @@ export declare class ToolEngine {
     private planOnly;
     private policies;
     private codegraphEngine;
+    private testSandbox;
     private readonly IGNORED_DIRS;
     private workdirReal;
     constructor(workdir?: string, autonomous?: boolean, policies?: Partial<CommandPolicy>);
     getCodeGraph(): CodeGraphEngine;
+    getTestSandbox(): TestSandbox;
     getWorkdir(): string;
     setAutonomous(autonomous: boolean): void;
     setPlanOnly(planOnly: boolean): void;
@@ -76,4 +79,12 @@ export declare class ToolEngine {
      * Carga y activa las instrucciones de una Skill instalada
      */
     private executeSkill;
+    /**
+     * Ejecuta un fragmento de prueba en sandbox aislado
+     */
+    private executeEvalCode;
+    /**
+     * Ejecuta el runner de pruebas del proyecto
+     */
+    private executeAutoTest;
 }

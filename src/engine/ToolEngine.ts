@@ -9,6 +9,7 @@ import { logger } from '../utils/logger.js';
 import { execAsync } from '../utils/exec.js';
 import { CodeGraphEngine } from '../codegraph/CodeGraphEngine.js';
 import { SkillManager } from '../skills/SkillManager.js';
+import { TestSandbox } from '../testing/TestSandbox.js';
 
 export interface CommandPolicy {
   deny: string[];
@@ -30,6 +31,7 @@ export class ToolEngine {
   private planOnly: boolean;
   private policies: CommandPolicy;
   private codegraphEngine: CodeGraphEngine;
+  private testSandbox: TestSandbox;
 
   private readonly IGNORED_DIRS = new Set([
     'node_modules',
@@ -55,10 +57,15 @@ export class ToolEngine {
       allow: policies?.allow ?? [],
     };
     this.codegraphEngine = new CodeGraphEngine(this.workdir);
+    this.testSandbox = new TestSandbox(this.workdir);
   }
 
   public getCodeGraph(): CodeGraphEngine {
     return this.codegraphEngine;
+  }
+
+  public getTestSandbox(): TestSandbox {
+    return this.testSandbox;
   }
 
   public getWorkdir(): string {
@@ -103,6 +110,12 @@ export class ToolEngine {
 
         case 'check':
           return await this.check();
+
+        case 'eval_code':
+          return await this.executeEvalCode(action.code || '', action.language || 'typescript');
+
+        case 'auto_test':
+          return await this.executeAutoTest(action.targetFile);
 
         case 'codegraph':
           return await this.executeCodeGraph(action.symbol, action.query);
@@ -685,6 +698,60 @@ export class ToolEngine {
     return {
       success: true,
       output: `[SKILL ACTIVADA: ${skill.meta.name}]\n${skill.instructions}`,
+    };
+  }
+
+  /**
+   * Ejecuta un fragmento de prueba en sandbox aislado
+   */
+  private async executeEvalCode(code: string, language: string): Promise<ToolResult> {
+    if (!code || code.trim().length === 0) {
+      return {
+        success: false,
+        error: 'El parámetro "code" no puede estar vacío para eval_code.',
+        output: 'Error: Debes proporcionar el código a evaluar en el parámetro "code".',
+      };
+    }
+
+    console.log(pc.gray(`  ┌─ Ejecutando Sandbox de Prueba (${language}) ──────────────`));
+    const result = await this.testSandbox.evalCode(code, language);
+    const lines = result.output.split('\n');
+    for (const l of lines) {
+      if (l.trim()) {
+        const isErr = !result.success || l.includes('Error') || l.includes('FAIL');
+        console.log(`  ${pc.gray('│')} ${isErr ? pc.red(l) : pc.dim(l)}`);
+      }
+    }
+    const badge = result.success ? pc.green(`✓ PASÓ (${result.durationMs}ms)`) : pc.red(`✖ FALLÓ (${result.durationMs}ms)`);
+    console.log(pc.gray(`  └─ ${badge} ───────────────────────────────────────────\n`));
+
+    return {
+      success: result.success,
+      output: `[RESULTADO PRUEBA SANDBOX (${result.success ? 'PASÓ ✓' : 'FALLÓ ✖'} - ${result.durationMs}ms)]:\n${result.output}`,
+      error: result.error,
+    };
+  }
+
+  /**
+   * Ejecuta el runner de pruebas del proyecto
+   */
+  private async executeAutoTest(targetFile?: string): Promise<ToolResult> {
+    console.log(pc.gray(`  ┌─ Ejecutando Pruebas Unitarias ${targetFile ? `(${targetFile})` : ''} ──────────────`));
+    const result = await this.testSandbox.runProjectTests(targetFile);
+    const lines = result.output.split('\n');
+    for (const l of lines) {
+      if (l.trim()) {
+        const isErr = !result.success || l.includes('FAIL') || l.includes('ERR');
+        console.log(`  ${pc.gray('│')} ${isErr ? pc.red(l) : pc.dim(l)}`);
+      }
+    }
+    const badge = result.success ? pc.green(`✓ PASARON (${result.durationMs}ms)`) : pc.red(`✖ FALLARON (${result.durationMs}ms)`);
+    console.log(pc.gray(`  └─ ${badge} ───────────────────────────────────────────\n`));
+
+    return {
+      success: result.success,
+      output: `[RESULTADO PRUEBAS DEL PROYECTO (${result.success ? 'PASARON ✓' : 'FALLARON ✖'} - ${result.durationMs}ms)]:\n${result.output}`,
+      error: result.error,
     };
   }
 }

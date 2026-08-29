@@ -17,6 +17,8 @@ export class ResponseParser {
     'grep',
     'glob',
     'check',
+    'eval_code',
+    'auto_test',
     'codegraph',
     'use_skill',
     'delegate_task',
@@ -343,6 +345,18 @@ Debes responder ESTRICTAMENTE con un bloque JSON parseable con esta estructura:
 
     if (accumulatedText.includes('"check"')) {
       return 'Ejecutando verificación de tipos y compilación...';
+    }
+
+    if (accumulatedText.includes('"eval_code"')) {
+      return '🧪 Ejecutando prueba aislada en sandbox (eval_code)...';
+    }
+
+    if (accumulatedText.includes('"auto_test"')) {
+      const fileMatch = accumulatedText.match(/"targetFile"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)/i);
+      if (fileMatch && fileMatch[1]) {
+        return `🧪 Ejecutando suite de pruebas para: ${fileMatch[1]}`;
+      }
+      return '🧪 Ejecutando pruebas unitarias del proyecto...';
     }
 
     if (accumulatedText.includes('"finish"')) {
