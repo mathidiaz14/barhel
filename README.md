@@ -120,6 +120,8 @@ Durante tu conversación en Barhel, puedes usar comandos especiales con `/`:
 | Comando | Descripción |
 | :--- | :--- |
 | `/help` | Muestra la lista de comandos disponibles |
+| `/workers` o `/analysis` | 🔍 **Inspector de Workers:** Abre el modal interactivo para leer el análisis y razonamiento completo de los agentes secundarios |
+| `/think` o `/thinking` | 💭 **Modo de Razonamiento:** Alterna entre el bloque visual completo estilo Claude Code o una sola línea compacta |
 | `/resume` o `/history` | Abre el selector visual para saltar a una sesión anterior con todo su contexto |
 | `/new [título]` | Inicia una nueva sesión limpia y abre un chat nuevo en el LLM web |
 | `/title <texto>` | Renombra el título descriptivo de la sesión actual |

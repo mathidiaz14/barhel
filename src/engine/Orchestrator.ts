@@ -7,6 +7,7 @@ import { ProviderType } from '../types/providers.js';
 import { logger } from '../utils/logger.js';
 import { ConfigManager } from '../utils/config.js';
 import { HistoryManager, ChatSession, TurnRecord } from '../utils/history.js';
+import { TUI } from '../cli/tui.js';
 import pc from 'picocolors';
 
 export class Orchestrator {
@@ -282,15 +283,23 @@ export class Orchestrator {
 
     while (iteration < maxIterations && !this.isShuttingDown) {
       iteration++;
-      logger.info(`Paso ReAct ${iteration}/${maxIterations}...`);
+
+      // Iniciar temporizador en vivo de pensamiento
+      const leaderName = this.leaderDriver.displayName;
+      TUI.startThinking(leaderName);
+      const thinkStart = performance.now();
 
       let responseRaw: string;
       try {
         responseRaw = await this.leaderDriver.sendMessage(nextPrompt);
       } catch (err) {
+        TUI.stopThinking();
         logger.error(`Error de comunicación con ${this.leaderDriver.displayName}`, err);
         break;
       }
+
+      const thinkDurationMs = Math.round(performance.now() - thinkStart);
+      TUI.stopThinking();
 
       // Capturar la URL actual del chat web para mantener persistencia 1-a-1
       const currentChatUrl = this.leaderDriver.getChatUrl();
@@ -306,9 +315,12 @@ export class Orchestrator {
         logger.warn(`Respuesta no parseable: ${parseResult.error}`);
         logger.info('Solicitando autocorrección en formato JSON...');
         try {
+          TUI.startThinking(leaderName, `${leaderName} está autocorrigiendo JSON`);
           const retryRaw = await this.leaderDriver.sendMessage(parseResult.correctionPrompt!);
+          TUI.stopThinking();
           parseResult = ResponseParser.parse(retryRaw);
         } catch (retryErr) {
+          TUI.stopThinking();
           logger.error('Fallo en la reintentación de formato JSON', retryErr);
         }
       }
@@ -323,11 +335,11 @@ export class Orchestrator {
       currentTurnRecord.actionType = action.type;
       currentTurnRecord.summary = action.summary;
 
-      // Mostrar razonamiento del modelo
-      logger.thought(thought);
+      // Mostrar razonamiento del modelo estilo Claude Code
+      TUI.renderThought(thought, thinkDurationMs);
 
-      // Mostrar acción
-      logger.action(action.type, {
+      // Mostrar acción a ejecutar
+      TUI.renderAction(action.type, {
         path: action.path,
         command: action.command,
         agent: action.agent,
@@ -350,15 +362,21 @@ export class Orchestrator {
         }
 
         const targetAgent = String(action.agent).toLowerCase();
-        logger.worker(targetAgent, `Delegando subtarea:\n${pc.dim(action.prompt)}`);
+        TUI.startThinking(targetAgent, `Consultando al worker [${targetAgent.toUpperCase()}]`);
+        const workerStart = performance.now();
+
         try {
           const workerDriver = await this.getWorkerDriver(targetAgent);
           const workerResponse = await workerDriver.sendMessage(action.prompt);
-          logger.worker(targetAgent, `Respuesta recibida (${workerResponse.length} caracteres).`);
+          const workerDurationMs = Math.round(performance.now() - workerStart);
+          TUI.stopThinking();
 
-          logger.toolResult(`delegate_task (${targetAgent})`, true, workerResponse);
+          // Renderizar tarjeta del Worker y almacenar análisis para inspección
+          TUI.renderWorkerDelegation(targetAgent, action.prompt, workerResponse, workerDurationMs);
+
           nextPrompt = `[OBSERVATION DELEGATE_TASK (${targetAgent.toUpperCase()})]:\n${workerResponse}\n\nContinúa con tu razonamiento y el siguiente paso en formato JSON.`;
         } catch (workerErr) {
+          TUI.stopThinking();
           const errMsg = workerErr instanceof Error ? workerErr.message : String(workerErr);
           logger.error(`Error en worker ${targetAgent}`, workerErr);
           nextPrompt = `[OBSERVATION ERROR WORKER ${targetAgent.toUpperCase()}]: ${errMsg}\nPor favor resuelve la tarea con tus herramientas locales.`;
@@ -368,7 +386,7 @@ export class Orchestrator {
 
       // Ejecutar herramientas locales del sistema
       const toolResult = await this.toolEngine.execute(action);
-      logger.toolResult(action.type, toolResult.success, toolResult.output);
+      TUI.renderToolResult(action.type, toolResult.success, toolResult.output);
 
       if (toolResult.isFinish) {
         logger.success(toolResult.output);

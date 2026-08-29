@@ -6,6 +6,7 @@ import { listSessionsStatus } from '../utils/session.js';
 import { DriverFactory } from '../drivers/DriverFactory.js';
 import { ConfigManager } from '../utils/config.js';
 import { HistoryManager } from '../utils/history.js';
+import { TUI } from './tui.js';
 import { CLIOptions } from '../types/actions.js';
 
 export async function startInteractiveChat(options: CLIOptions = {}): Promise<void> {
@@ -35,7 +36,7 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
     const leaderMeta = DriverFactory.getMeta(orchestrator.getLeaderId());
     const leaderName = leaderMeta?.name || orchestrator.getLeaderId();
     const workersNames = orchestrator.getActiveWorkers().join(', ');
-    logger.banner(
+    TUI.renderBanner(
       workdir,
       orchestrator.isAutonomous(),
       leaderName,
@@ -84,6 +85,30 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
         case '/help':
           logger.printHelp();
           break;
+
+        case '/workers':
+        case '/analysis':
+        case '/inspect': {
+          rl.pause();
+          try {
+            await TUI.promptWorkerInspection();
+          } catch (inspectErr) {
+            logger.error('Error en inspector de workers', inspectErr);
+          }
+          rl.resume();
+          break;
+        }
+
+        case '/think':
+        case '/thinking': {
+          const isFull = TUI.toggleThinkingDisplay();
+          if (isFull) {
+            console.log(`\n${pc.magenta('💭 Modo de Razonamiento:')} ${pc.bgGreen(pc.black(' COMPLETO (Claude Code Style) '))}\n`);
+          } else {
+            console.log(`\n${pc.magenta('💭 Modo de Razonamiento:')} ${pc.bgYellow(pc.black(' RESUMIDO (Línea compacta) '))}\n`);
+          }
+          break;
+        }
 
         case '/resume':
         case '/history': {

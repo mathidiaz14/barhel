@@ -109,8 +109,10 @@ ${pc.gray('═'.repeat(64))}
 ${pc.bold(pc.cyan('Comandos disponibles en el Chat de Barhel:'))}
 
   ${pc.bold(pc.yellow('/help'))}               - Muestra esta lista de comandos de ayuda
+  ${pc.bold(pc.yellow('/workers'))} o ${pc.bold(pc.yellow('/analysis'))}- Abre el inspector para leer el análisis completo de los agentes de soporte
+  ${pc.bold(pc.yellow('/think'))} o ${pc.bold(pc.yellow('/thinking'))} - Alterna entre razonamiento visual completo o compacto
   ${pc.bold(pc.yellow('/resume'))} o ${pc.bold(pc.yellow('/history'))}- Abre el menú para cambiar a una sesión anterior con todo su contexto
-  ${pc.bold(pc.yellow('/new'))}                 - Inicia una nueva sesión limpia y abre un nuevo chat en el LLM
+  ${pc.bold(pc.yellow('/new [título]'))}        - Inicia una nueva sesión limpia y abre un nuevo chat en el LLM
   ${pc.bold(pc.yellow('/title <texto>'))}       - Renombra el título descriptivo de la sesión actual
   ${pc.bold(pc.yellow('/sessions'))} o ${pc.bold(pc.yellow('/list'))} - Lista el historial de sesiones guardadas
   ${pc.bold(pc.yellow('/config'))} o ${pc.bold(pc.yellow('/models'))} - Cambia interactivamente el modelo Líder y los Workers

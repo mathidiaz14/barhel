@@ -9,6 +9,7 @@ import { ConfigManager } from '../src/utils/config.js';
 import { HistoryManager } from '../src/utils/history.js';
 import { listSessionsStatus } from '../src/utils/session.js';
 import { logger } from '../src/utils/logger.js';
+import { TUI } from '../src/cli/tui.js';
 
 const program = new Command();
 
@@ -68,7 +69,7 @@ program
       const leaderName = leaderMeta?.name || orchestrator.getLeaderId();
       const workersNames = orchestrator.getActiveWorkers().join(', ');
 
-      logger.banner(
+      TUI.renderBanner(
         options.workdir,
         options.autonomous,
         leaderName,
