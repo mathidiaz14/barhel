@@ -2,7 +2,7 @@ import readline from 'node:readline';
 import path from 'node:path';
 import fs from 'node:fs';
 import pc from 'picocolors';
-import { select, input as promptInput } from '@inquirer/prompts';
+import { select, search, input as promptInput } from '@inquirer/prompts';
 import { Orchestrator } from '../engine/Orchestrator.js';
 import { logger } from '../utils/logger.js';
 import { listSessionsStatus } from '../utils/session.js';
@@ -333,27 +333,36 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
     }
   };
 
-  // Menú interactivo de selección de comandos
-  const openInteractiveMenu = async (): Promise<void> => {
+  // Menú interactivo de selección de comandos con búsqueda en vivo
+  const openInteractiveMenu = async (initialQuery = ''): Promise<void> => {
     const choices = AVAILABLE_SLASH_COMMANDS.map((c) => ({
-      name: `${pc.cyan(pc.bold(c.name.padEnd(12)))} ${pc.dim(c.desc)}`,
+      name: `${pc.cyan(pc.bold(c.name.padEnd(12)))} ${pc.white(c.desc)}`,
       value: c.name,
-      description: `Ejecuta ${c.name}${c.aliases ? ` (alias: ${c.aliases.join(', ')})` : ''}`,
+      description: `Comando: ${c.name}${c.aliases ? ` (alias: ${c.aliases.join(', ')})` : ''}`,
     }));
 
     choices.push({
-      name: pc.gray('✖ Cancelar y volver al chat'),
+      name: pc.gray('✖ Volver al chat'),
       value: '__cancel__',
       description: 'Cierra el menú de comandos',
     });
 
-    const selectedCommand = await select({
-      message: '⚡ Selecciona un comando para ejecutar:',
-      choices,
-      pageSize: 15,
+    const selectedCommand = await search({
+      message: '⚡ Escribe para filtrar comandos (o navega con flechas):',
+      source: async (term) => {
+        const query = (term || initialQuery).toLowerCase().replace(/^\//, '').trim();
+        if (!query) return choices;
+        return choices.filter((c) => {
+          if (c.value === '__cancel__') return true;
+          const matchVal = c.value.toLowerCase().includes(query);
+          const matchName = c.name.toLowerCase().includes(query);
+          return matchVal || matchName;
+        });
+      },
+      pageSize: 12,
     });
 
-    if (selectedCommand === '__cancel__') return;
+    if (!selectedCommand || selectedCommand === '__cancel__') return;
 
     const cmdDef = AVAILABLE_SLASH_COMMANDS.find((c) => c.name === selectedCommand);
     let finalArg = '';
@@ -380,13 +389,13 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
       return;
     }
 
-    // Si el usuario escribe únicamente "/" o "/menu", abre el menú interactivo
+    // Si el usuario escribe únicamente "/" o "/menu", abre el menú interactivo con búsqueda en vivo
     if (input === '/' || input === '/menu') {
       rl.pause();
       try {
-        await openInteractiveMenu();
-      } catch (menuErr) {
-        // En caso de Ctrl+C o interrupción en el menú
+        await openInteractiveMenu('');
+      } catch {
+        // Ignorar interrupción en menú
       }
       rl.resume();
       rl.prompt();
@@ -399,9 +408,20 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
       const command = parts[0].toLowerCase();
       const arg = parts.slice(1).join(' ').trim();
 
+      // Verificar si el comando existe directamente o por alias
+      const isKnown = AVAILABLE_SLASH_COMMANDS.some(
+        (c) => c.name === command || c.aliases?.includes(command)
+      );
+
       rl.pause();
       try {
-        await runCommand(command, arg);
+        if (isKnown) {
+          await runCommand(command, arg);
+        } else {
+          // Si no se reconoce exactamente, abrir el buscador filtrando por lo que escribió
+          console.log(pc.yellow(`Comando "${command}" no encontrado. Abriendo buscador de comandos...`));
+          await openInteractiveMenu(command);
+        }
       } catch (cmdErr) {
         logger.error('Error al ejecutar comando', cmdErr);
       }

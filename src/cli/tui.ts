@@ -229,38 +229,42 @@ export class TUI {
   ): void {
     const dirName = path.basename(workdir) || workdir;
     const modeBadge = autonomous 
-      ? pc.bgGreen(pc.black(' AUTO ')) 
-      : pc.bgYellow(pc.black(' SAFE '));
-    const sessionName = sessionTitle || 'Session';
-    const idBadge = sessionId ? `#${sessionId.slice(0, 8)}` : '#new';
-
-    const dim = pc.dim;
-    const white = pc.white;
-    const cyan = pc.cyan;
-    const gray = pc.gray;
-    const bold = pc.bold;
-
+      ? pc.bgGreen(pc.black(' AUTONOMOUS ')) 
+      : pc.bgYellow(pc.black(' SAFE MODE '));
+    const sessionName = sessionTitle || 'Sesión de desarrollo';
+    const idBadge = sessionId ? `#${sessionId.slice(0, 8)}` : '#nueva';
     const version = getBarhelVersion();
-    const barhelLogo = `${bold(white('barhel'))} ${dim(`v${version}`)}`;
 
-    console.log();
-    console.log(`  ${gray('┌' + '─'.repeat(60))}`);
-    console.log(`  ${gray('│')}  ${barhelLogo}  ${dim(`(${idBadge})`)}`);
-    console.log(`  ${gray('├' + '─'.repeat(60))}`);
-    console.log(`  ${gray('│')}  ${dim('Dir:')}  ${white(dirName)}  ${dim(workdir)}`);
-    console.log(`  ${gray('│')}  ${dim('Model:')}  ${cyan(bold(leaderName))}`);
-    if (workersStr) {
-      console.log(`  ${gray('│')}  ${dim('Agents:')}  ${pc.yellow(workersStr)}`);
-    }
-    console.log(`  ${gray('│')}  ${dim('Mode:')}  ${modeBadge}`);
-    console.log(`  ${gray('└' + '─'.repeat(60))}`);
-    console.log();
-    console.log(`  ${dim('Tip:')}  ${cyan('/')} for commands  ${dim('•')}  ${cyan('Ctrl+C')} to exit`);
-    console.log();
+    const cy = pc.cyan;
+    const mag = pc.magenta;
+    const b = pc.gray;
+    const g = pc.dim;
+    const w = pc.white;
+
+    console.log(`
+${b('╭─')} ${pc.red('●')} ${pc.yellow('●')} ${pc.green('●')} ${b('─'.repeat(8))} ${pc.bold(w(`BARHEL / OPENCODE`))} ${b('─'.repeat(32))} ${g(`v${version}`)} ${b('─╮')}
+${b('│')}                                                                          ${b('│')}
+${b('│')}     ${cy(pc.bold('____             __          __'))}                                   ${b('│')}
+${b('│')}    ${cy(pc.bold('/ __ )____ ______/ /_  ___   / /'))}   ${g('Autonomous CLI Coding Agent')}      ${b('│')}
+${b('│')}   ${cy(pc.bold('/ __  / __ `/ ___/ __ \\/ _ \\ / / '))}  ${g('Multi-Model Web Architecture')}    ${b('│')}
+${b('│')}  ${cy(pc.bold('/ /_/ / /_/ / /  / / / /  __// /  '))}                                 ${b('│')}
+${b('│')} ${cy(pc.bold('/_____/\\__,_/_/  /_/ /_/\\___//_/   '))}  ${mag(pc.bold('OpenCode & Claude Engine'))}       ${b('│')}
+${b('│')}                                                                          ${b('│')}
+${b('├' + '─'.repeat(74) + '┤')}
+${b('│')} ${g('📂 Workspace :')} ${w(pc.bold(dirName))} ${g(`(${workdir}:main)`)}
+${b('│')} ${g('💬 Sesión    :')} ${cy(sessionName)} ${g(`(${idBadge} • Memoria activa)`)}
+${b('│')} ${g('👑 Modelo    :')} ${pc.bold(cy(leaderName))} ${g('(Líder principal)')}
+${b('│')} ${g('👥 Workers   :')} ${pc.yellow(workersStr || 'Ninguno')} ${g('(Asistentes de soporte)')}
+${b('│')} ${g('🛡️  Modo      :')} ${modeBadge} ${g('(usa /auto para alternar autonomía)')}
+${b('├' + '─'.repeat(74) + '┤')}
+${b('│')} ${g('⚡')} ${pc.bold(w('Paleta de comandos:'))} ${cy('Escribe /')} ${g('para abrir el menú con búsqueda en vivo')}
+${b('│')} ${g('💡')} ${w('Atajos rápidos    :')} ${cy('/workers')} ${g('análisis')} │ ${cy('/resume')} ${g('sesiones')} │ ${cy('/think')} │ ${cy('/help')}
+${b('╰' + '─'.repeat(74) + '╯')}
+`);
   }
 
   public static getPromptPrefix(leaderName = 'barhel'): string {
-    return `${pc.green('>')} ${pc.dim(leaderName)} ${pc.gray('›')} `;
+    return `${pc.blue('▌')} ${pc.bold(pc.white(leaderName))} ${pc.gray('❯')} `;
   }
 
   public static renderWelcome(): void {
