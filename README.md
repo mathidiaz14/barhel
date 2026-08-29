@@ -181,7 +181,7 @@ Durante tu conversación en Barhel, puedes usar comandos especiales con `/`:
 | Comando | Descripción |
 | :--- | :--- |
 | `/help` | Muestra la lista de comandos disponibles |
-| `/codegraph [simbolo]` | 🕸️ **CodeGraph en Memoria:** Muestra el grafo de arquitectura AST, funciones, clases y relaciones de llamadas en milisegundos |
+| `/graph [simbolo]` | 🕸️ **CodeGraph en Memoria:** Muestra el grafo de arquitectura AST, funciones, clases y relaciones de llamadas en milisegundos (alias: `/codegraph`) |
 | `/skills` | ⚡ **Lista de Skills:** Muestra las habilidades instaladas al estilo Claude Code |
 | `/skill install <url>` | 📥 **Instalar Skill:** Descarga e instala automáticamente una skill desde GitHub/URL |
 | `/progress` o `/supervise` | 📊 **Supervisión de Agentes:** Muestra el porcentaje de avance (%) en tiempo real del Líder y Workers |

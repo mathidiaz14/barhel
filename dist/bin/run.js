@@ -306,7 +306,8 @@ program
 });
 // Subcomando: CodeGraph - Análisis AST y Grafo de Símbolos
 program
-    .command('codegraph [query]')
+    .command('graph [query]')
+    .alias('codegraph')
     .description('Analiza e indexa en memoria el grafo de símbolos y dependencias AST del repositorio')
     .option('-w, --workdir <path>', 'Directorio de trabajo', process.cwd())
     .action(async (query, options) => {

@@ -17,7 +17,7 @@ import { ProgressSupervisor } from '../engine/ProgressSupervisor.js';
 import { TelegramBot } from '../daemon/TelegramBot.js';
 import { DaemonManager } from '../daemon/DaemonManager.js';
 const AVAILABLE_SLASH_COMMANDS = [
-    { name: '/codegraph', desc: 'Mapa de arquitectura AST y búsqueda de símbolos en memoria', needsArg: 'Símbolo o consulta (opcional):', optionalArg: true },
+    { name: '/graph', desc: 'Mapa de arquitectura AST y búsqueda de símbolos en memoria', aliases: ['/codegraph'], needsArg: 'Símbolo o consulta (opcional):', optionalArg: true },
     { name: '/skills', desc: 'Lista las skills instaladas estilo Claude Code' },
     { name: '/skill', desc: 'Instala o inspecciona una skill (ej: /skill install <url>)', needsArg: 'Comando o URL de la skill:' },
     { name: '/progress', desc: 'Supervisión en vivo y avance (%) de los agentes', aliases: ['/supervise'] },
@@ -126,6 +126,7 @@ export async function startInteractiveChat(options = {}) {
     // Funcion ejecutora de comandos
     const runCommand = async (command, arg) => {
         switch (command) {
+            case '/graph':
             case '/codegraph': {
                 const codeGraph = new CodeGraphEngine(workdir);
                 logger.startSpinner('Consultando CodeGraph en memoria...');
