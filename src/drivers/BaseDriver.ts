@@ -62,8 +62,17 @@ export abstract class BaseDriver {
     }
 
     const sessionDir = getProviderSessionPath(this.config.sessionDirName);
-    const userAgent =
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+    const getSystemUserAgent = (): string => {
+      const plat = process.platform;
+      if (plat === 'win32') {
+        return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+      } else if (plat === 'darwin') {
+        return 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+      } else {
+        return 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+      }
+    };
+    const userAgent = getSystemUserAgent();
 
     const launchArgs = [
       '--window-position=0,0',
@@ -73,12 +82,37 @@ export abstract class BaseDriver {
       '--disable-infobars',
     ];
 
+    const isSandboxError = (err: any) => {
+      const msg = String(err?.message || '');
+      return msg.includes('sandbox') || msg.includes('Sandbox') || msg.includes('sandboxing');
+    };
+
+    const doLaunch = async (options: any): Promise<BrowserContext> => {
+      try {
+        return await chromium.launchPersistentContext(sessionDir, {
+          ...options,
+          channel: 'chrome',
+        });
+      } catch (err: any) {
+        if (isSandboxError(err)) throw err;
+        try {
+          return await chromium.launchPersistentContext(sessionDir, {
+            ...options,
+            channel: 'msedge',
+          });
+        } catch (err2: any) {
+          if (isSandboxError(err2)) throw err2;
+          return await chromium.launchPersistentContext(sessionDir, options);
+        }
+      }
+    };
+
     try {
       const launchOptions = {
         headless,
         userAgent,
         viewport: { width: 1280, height: 800 },
-        args: launchArgs,
+        args: [...launchArgs],
         ignoreDefaultArgs: ['--enable-automation', '--no-sandbox', '--disable-setuid-sandbox'],
         deviceScaleFactor: 1,
         hasTouch: false,
@@ -87,36 +121,45 @@ export abstract class BaseDriver {
         timezoneId: 'America/Argentina/Buenos_Aires',
       };
 
-      // Intentar primero con Google Chrome del sistema o Edge para máxima legitimidad
       try {
-        this.context = await chromium.launchPersistentContext(sessionDir, {
-          ...launchOptions,
-          channel: 'chrome',
-        });
-      } catch {
-        try {
-          this.context = await chromium.launchPersistentContext(sessionDir, {
+        this.context = await doLaunch(launchOptions);
+      } catch (err: any) {
+        if (isSandboxError(err)) {
+          logger.warn('Detección de fallo de sandbox de Chromium. Reintentando sin sandbox...');
+          const fallbackOptions = {
             ...launchOptions,
-            channel: 'msedge',
-          });
-        } catch {
-          try {
-            this.context = await chromium.launchPersistentContext(sessionDir, launchOptions);
-          } catch (err: any) {
-            const msg = String(err?.message || '');
-            if (msg.includes("Executable doesn't exist") || msg.includes('playwright install')) {
-              logger.info('Navegador Chromium no encontrado. Instalándolo automáticamente con Playwright...');
-              const { execSync } = await import('node:child_process');
+            ignoreDefaultArgs: ['--enable-automation'],
+            args: [...launchOptions.args, '--no-sandbox', '--disable-setuid-sandbox'],
+          };
+          this.context = await doLaunch(fallbackOptions);
+        } else {
+          const msg = String(err?.message || '');
+          if (msg.includes("Executable doesn't exist") || msg.includes('playwright install')) {
+            logger.info('Navegador Chromium no encontrado. Instalándolo automáticamente con Playwright...');
+            const { execSync } = await import('node:child_process');
+            try {
+              execSync('npx playwright install chromium', { stdio: 'inherit' });
               try {
-                execSync('npx playwright install chromium', { stdio: 'inherit' });
-                this.context = await chromium.launchPersistentContext(sessionDir, launchOptions);
-              } catch (installErr) {
-                logger.error('No se pudo instalar Chromium automáticamente.', installErr);
-                throw err;
+                this.context = await doLaunch(launchOptions);
+              } catch (retryErr: any) {
+                if (isSandboxError(retryErr)) {
+                  logger.warn('Detección de fallo de sandbox de Chromium tras la instalación. Reintentando sin sandbox...');
+                  const fallbackOptions = {
+                    ...launchOptions,
+                    ignoreDefaultArgs: ['--enable-automation'],
+                    args: [...launchOptions.args, '--no-sandbox', '--disable-setuid-sandbox'],
+                  };
+                  this.context = await doLaunch(fallbackOptions);
+                } else {
+                  throw retryErr;
+                }
               }
-            } else {
+            } catch (installErr) {
+              logger.error('No se pudo instalar Chromium automáticamente.', installErr);
               throw err;
             }
+          } else {
+            throw err;
           }
         }
       }
@@ -180,7 +223,7 @@ export abstract class BaseDriver {
 
     if (!this.page) throw new Error('Página no inicializada');
 
-    await this.ensureChatPage(this.config.url);
+    await this.ensureChatPage(this.config.url, false);
     await this.page.bringToFront();
 
     logger.success(`Navegador abierto en ${this.config.url}`);
@@ -204,7 +247,7 @@ export abstract class BaseDriver {
   /**
    * Navega a la página del chat (o a una URL de chat específica) y espera a que esté lista
    */
-  public async ensureChatPage(targetChatUrl?: string): Promise<void> {
+  public async ensureChatPage(targetChatUrl?: string, checkAuth = true): Promise<void> {
     if (!this.page) throw new Error('Página no inicializada');
 
     const destUrl = targetChatUrl || this.currentChatUrl || this.config.url;
@@ -219,7 +262,7 @@ export abstract class BaseDriver {
     }
 
     const afterUrl = this.page.url();
-    if (afterUrl.includes('/sign_in') || afterUrl.includes('/login') || afterUrl.includes('/auth')) {
+    if (checkAuth && (afterUrl.includes('/sign_in') || afterUrl.includes('/login') || afterUrl.includes('/auth'))) {
       throw new Error(
         `Tu sesión de ${this.config.displayName} no está autenticada. Por favor ejecuta: barhel login ${this.config.id}`
       );

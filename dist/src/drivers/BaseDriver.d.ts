@@ -26,7 +26,7 @@ export declare abstract class BaseDriver {
     /**
      * Navega a la página del chat (o a una URL de chat específica) y espera a que esté lista
      */
-    ensureChatPage(targetChatUrl?: string): Promise<void>;
+    ensureChatPage(targetChatUrl?: string, checkAuth?: boolean): Promise<void>;
     /**
      * Inyecta de forma universal y ultra-rápida prompts de cualquier longitud
      * compatible con editores ricos (Lexical, ProseMirror, React, Draft.js, Svelte).
