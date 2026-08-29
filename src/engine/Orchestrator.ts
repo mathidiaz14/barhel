@@ -397,9 +397,12 @@ export class Orchestrator {
         let responseRaw: string;
         try {
           let streamedChars = 0;
+          let fullStreamedText = '';
           const onStreamChunk = (chunk: string) => {
             streamedChars += chunk.length;
-            TUI.updateThinkingChunk(streamedChars, leaderName);
+            fullStreamedText += chunk;
+            const preview = ResponseParser.extractStreamingPreview(fullStreamedText);
+            TUI.updateThinkingChunk(streamedChars, leaderName, preview || undefined);
           };
           responseRaw = await this.leaderDriver.sendMessage(nextPrompt, onStreamChunk);
           this.sendFailures = 0;

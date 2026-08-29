@@ -43,13 +43,14 @@ export class TUI {
   }
 
   /**
-   * Actualiza el progreso de streaming en vivo con el número de caracteres recibidos
+   * Actualiza el progreso de streaming en vivo con el número de caracteres y lo que el modelo está pensando
    */
-  public static updateThinkingChunk(charCount: number, modelName = 'Líder'): void {
+  public static updateThinkingChunk(charCount: number, modelName = 'Líder', previewText?: string): void {
     DualPane.setLeaderStatus('Generando');
     if (isSpinnerActive() && this.thinkingStartTime > 0) {
       const elapsedSec = ((Date.now() - this.thinkingStartTime) / 1000).toFixed(1);
-      updateSpinnerText(`${pc.yellow('✻')} ${pc.dim(`${modelName} generando`)} ${pc.yellow(`(${elapsedSec}s • ${charCount} chars)`)}`);
+      const previewStr = previewText ? ` ${pc.dim('•')} ${pc.cyan(`"${previewText}"`)}` : '';
+      updateSpinnerText(`${pc.yellow('✻')} ${pc.dim(`${modelName} analizando`)} ${pc.yellow(`(${elapsedSec}s • ${charCount} chars)`)}${previewStr}`);
     }
   }
 

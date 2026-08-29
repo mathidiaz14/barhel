@@ -282,4 +282,43 @@ Debes responder ESTRICTAMENTE con un bloque JSON parseable con esta estructura:
 }
 \`\`\``;
   }
+
+  /**
+   * Extrae un preview en vivo de lo que el modelo está pensando o planeando hacer mientras transmite
+   */
+  public static extractStreamingPreview(accumulatedText: string): string | null {
+    if (!accumulatedText) return null;
+
+    // 1. Buscar bloques de pensamiento <think>
+    const thinkMatch = accumulatedText.match(/<think>([\s\S]*?)(?:<\/think>|$)/i);
+    if (thinkMatch && thinkMatch[1]) {
+      const thinkLines = thinkMatch[1].trim().split('\n').filter(Boolean);
+      if (thinkLines.length > 0) {
+        const lastLine = thinkLines[thinkLines.length - 1].trim();
+        if (lastLine.length > 3) {
+          return lastLine.length > 65 ? lastLine.slice(0, 62) + '...' : lastLine;
+        }
+      }
+    }
+
+    // 2. Buscar campo "thought": "..." parcial
+    const thoughtMatch = accumulatedText.match(/"thought"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)/i);
+    if (thoughtMatch && thoughtMatch[1]) {
+      const clean = thoughtMatch[1].replace(/\\n/g, ' ').replace(/\\"/g, '"').trim();
+      if (clean.length > 3) {
+        return clean.length > 65 ? clean.slice(0, 62) + '...' : clean;
+      }
+    }
+
+    // 3. Buscar campo "summary": "..."
+    const summaryMatch = accumulatedText.match(/"summary"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)/i);
+    if (summaryMatch && summaryMatch[1]) {
+      const clean = summaryMatch[1].replace(/\\n/g, ' ').replace(/\\"/g, '"').trim();
+      if (clean.length > 3) {
+        return clean.length > 65 ? clean.slice(0, 62) + '...' : clean;
+      }
+    }
+
+    return null;
+  }
 }

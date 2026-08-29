@@ -270,7 +270,25 @@ export class ToolEngine {
       }
     }
 
-    const result = await execAsync(command, { cwd: this.workdir });
+    console.log(pc.gray(`  ┌─ Ejecutando: ${command} ──────────────────────────────────────`));
+    let hasOutput = false;
+    const result = await execAsync(command, {
+      cwd: this.workdir,
+      onChunk: (chunk) => {
+        hasOutput = true;
+        const lines = chunk.split('\n');
+        for (const line of lines) {
+          if (line.trim().length > 0) {
+            console.log(`  ${pc.gray('│')} ${pc.dim(line)}`);
+          }
+        }
+      },
+    });
+    if (!hasOutput) {
+      console.log(`  ${pc.gray('│')} ${pc.dim('(completado sin salida)')}`);
+    }
+    console.log(pc.gray(`  └───────────────────────────────────────────────────────────────\n`));
+
     return {
       success: result.ok,
       output: result.combined || (result.ok ? '(Comando ejecutado con salida vacía)' : '(Sin salida)'),

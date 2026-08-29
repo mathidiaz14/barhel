@@ -1,33 +1,55 @@
-import { promisify } from 'node:util';
-import { exec } from 'node:child_process';
-const execP = promisify(exec);
+import { spawn } from 'node:child_process';
 /**
- * Ejecuta un comando capturando STDOUT/STDERR combinados sin lanzar excepción al fallar.
+ * Ejecuta un comando en terminal con streaming de salida en tiempo real.
+ * Si se pasa onChunk, se emiten los fragmentos de STDOUT/STDERR a medida que ocurren.
  */
-export async function execAsync(command, options = {}) {
-    const { cwd, timeoutMs = 120000, maxBuffer = 1024 * 1024 * 10 } = options;
-    try {
-        const { stdout, stderr } = await execP(command, { cwd, timeout: timeoutMs, maxBuffer });
-        const stdoutStr = stdout ? stdout.trim() : '';
-        const stderrStr = stderr ? stderr.trim() : '';
+export function execAsync(command, options = {}) {
+    return new Promise((resolve) => {
+        const { cwd = process.cwd(), timeoutMs = 180000, onChunk } = options;
         let combined = '';
-        if (stdoutStr)
-            combined += `[STDOUT]\n${stdoutStr}\n`;
-        if (stderrStr)
-            combined += `[STDERR]\n${stderrStr}\n`;
-        return { combined: combined.trim(), ok: true };
-    }
-    catch (err) {
-        const e = err;
-        const stdoutStr = e.stdout ? String(e.stdout).trim() : '';
-        const stderrStr = e.stderr ? String(e.stderr).trim() : '';
-        let combined = '';
-        if (stdoutStr)
-            combined += `[STDOUT]\n${stdoutStr}\n`;
-        if (stderrStr)
-            combined += `[STDERR]\n${stderrStr}\n`;
-        combined += `[EXIT CODE: ${e.code ?? 1}] ${e.message ?? ''}`;
-        return { combined: combined.trim(), ok: false, raw: e.message };
-    }
+        let killed = false;
+        const child = spawn(command, {
+            cwd,
+            shell: true,
+            windowsHide: true,
+        });
+        const timer = setTimeout(() => {
+            killed = true;
+            try {
+                child.kill('SIGKILL');
+            }
+            catch { }
+        }, timeoutMs);
+        child.stdout?.on('data', (data) => {
+            const text = data.toString('utf-8');
+            combined += text;
+            if (onChunk)
+                onChunk(text);
+        });
+        child.stderr?.on('data', (data) => {
+            const text = data.toString('utf-8');
+            combined += text;
+            if (onChunk)
+                onChunk(text);
+        });
+        child.on('error', (err) => {
+            clearTimeout(timer);
+            resolve({
+                combined: combined.trim(),
+                ok: false,
+                raw: err.message,
+            });
+        });
+        child.on('close', (code) => {
+            clearTimeout(timer);
+            const isOk = code === 0 && !killed;
+            resolve({
+                combined: combined.trim(),
+                ok: isOk,
+                code: code ?? (killed ? 124 : 0),
+                raw: !isOk ? (killed ? 'Tiempo de espera excedido (Timeout)' : `Código de salida: ${code}`) : undefined,
+            });
+        });
+    });
 }
 //# sourceMappingURL=exec.js.map

@@ -29,4 +29,8 @@ export declare class ResponseParser {
      * Genera el prompt de autocorrección que se inyecta de vuelta al modelo si falla
      */
     static generateCorrectionPrompt(errorMessage: string): string;
+    /**
+     * Extrae un preview en vivo de lo que el modelo está pensando o planeando hacer mientras transmite
+     */
+    static extractStreamingPreview(accumulatedText: string): string | null;
 }

@@ -10,9 +10,9 @@ export declare class TUI {
      */
     static startThinking(modelName?: string, customText?: string): void;
     /**
-     * Actualiza el progreso de streaming en vivo con el número de caracteres recibidos
+     * Actualiza el progreso de streaming en vivo con el número de caracteres y lo que el modelo está pensando
      */
-    static updateThinkingChunk(charCount: number, modelName?: string): void;
+    static updateThinkingChunk(charCount: number, modelName?: string, previewText?: string): void;
     /**
      * Detiene el spinner de pensamiento y retorna el tiempo transcurrido en ms
      */
