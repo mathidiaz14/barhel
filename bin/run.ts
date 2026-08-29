@@ -9,8 +9,9 @@ import { Orchestrator } from '../src/engine/Orchestrator.js';
 import { DriverFactory } from '../src/drivers/DriverFactory.js';
 import { ConfigManager } from '../src/utils/config.js';
 import { HistoryManager } from '../src/utils/history.js';
-import { listSessionsStatus } from '../src/utils/session.js';
+import { listSessionsStatus, getSessionBasePath } from '../src/utils/session.js';
 import { logger } from '../src/utils/logger.js';
+import { execSync } from 'node:child_process';
 import { getBarhelVersion } from '../src/utils/version.js';
 import { TUI } from '../src/cli/tui.js';
 
@@ -238,6 +239,56 @@ program
       logger.success(`Sesión exportada: ${outPath}`);
     } catch (err) {
       logger.error(`No se pudo exportar la sesión: ${err}`);
+      process.exit(1);
+    }
+  });
+
+// Subcomando: Exportar copia de seguridad (backup) de todas las sesiones
+program
+  .command('backup [file]')
+  .description('Exporta todas las sesiones de autenticación e historial a un archivo comprimido (.tar.gz)')
+  .action((fileArg) => {
+    const defaultFilename = `barhel-backup-${new Date().toISOString().substring(0, 10)}.tar.gz`;
+    const targetFile = fileArg ? path.resolve(fileArg) : path.join(process.cwd(), defaultFilename);
+    const sessionDir = getSessionBasePath();
+    const parentDir = path.dirname(sessionDir);
+    const dirName = path.basename(sessionDir);
+
+    logger.info(`Exportando todas las sesiones y el historial a: ${targetFile}...`);
+    try {
+      if (!fs.existsSync(sessionDir)) {
+        logger.error('No hay sesiones existentes para exportar.');
+        process.exit(1);
+      }
+      execSync(`tar -czf "${targetFile}" -C "${parentDir}" "${dirName}"`);
+      logger.success(`Copia de seguridad exportada con éxito en: ${targetFile}`);
+    } catch (err) {
+      logger.error('Error al exportar la copia de seguridad', err);
+      process.exit(1);
+    }
+  });
+
+// Subcomando: Importar copia de seguridad (restore) de todas las sesiones
+program
+  .command('restore <file>')
+  .description('Importa sesiones de autenticación e historial desde un archivo comprimido (.tar.gz)')
+  .action((fileArg) => {
+    const targetFile = path.resolve(fileArg);
+    const sessionDir = getSessionBasePath();
+    const parentDir = path.dirname(sessionDir);
+
+    logger.info(`Importando sesiones e historial desde: ${targetFile}...`);
+    try {
+      if (!fs.existsSync(targetFile)) {
+        logger.error(`El archivo de copia de seguridad no existe: ${targetFile}`);
+        process.exit(1);
+      }
+      // Aseguramos que la carpeta base exista
+      fs.mkdirSync(parentDir, { recursive: true });
+      execSync(`tar -xzf "${targetFile}" -C "${parentDir}"`);
+      logger.success(`Sesiones e historial importados con éxito.`);
+    } catch (err) {
+      logger.error('Error al importar la copia de seguridad', err);
       process.exit(1);
     }
   });

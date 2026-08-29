@@ -1,7 +1,7 @@
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
-import { AVAILABLE_PROVIDERS } from '../drivers/DriverFactory.js';
+import { ProviderType } from '../types/providers.js';
 const SESSIONS_BASE_DIR = path.join(os.homedir(), '.dev-agent-sessions');
 export function getSessionBasePath() {
     if (!fs.existsSync(SESSIONS_BASE_DIR)) {
@@ -18,7 +18,7 @@ export function getProviderSessionPath(provider) {
     return providerPath;
 }
 export function listSessionsStatus() {
-    const providers = Object.keys(AVAILABLE_PROVIDERS);
+    const providers = Object.values(ProviderType);
     const result = {};
     for (const provider of providers) {
         const pPath = getProviderSessionPath(provider);
