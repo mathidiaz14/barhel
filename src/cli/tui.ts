@@ -419,10 +419,6 @@ export class TUI {
       cy(' / /_/ / /_/ / /  / / / /  __// /  '),
       cy('/_____/\\__,_/_/  /_/ /_/\\___//_/   '),
       g('Autonomous Multi-Model Coding Agent'),
-      '',
-      g('────────────────────────────────────────'),
-      g('Escribe una instrucción o / para el menú'),
-      g('────────────────────────────────────────'),
     ];
 
     console.log();
