@@ -324,10 +324,33 @@ export class Orchestrator {
     return driver;
   }
 
+  public isTurnRunning = false;
+  private isInterrupted = false;
+
+  /**
+   * Cancela o interrumpe en caliente la generación y razonamiento actual del LLM
+   */
+  public async interruptCurrentTurn(): Promise<void> {
+    this.isInterrupted = true;
+    TUI.stopThinking();
+    logger.stopSpinner();
+    try {
+      await this.leaderDriver.stopGeneration();
+      for (const [, driver] of this.workerDrivers.entries()) {
+        await driver.stopGeneration();
+      }
+    } catch {
+      // Ignorar errores de cancelación
+    }
+  }
+
   /**
    * Ejecuta un turno de conversación (ReAct Loop) sin cerrar el navegador al terminar
    */
   public async runTurn(userGoal: string): Promise<void> {
+    this.isTurnRunning = true;
+    this.isInterrupted = false;
+
     if (!this.isInitialized) {
       await this.initSession();
     }
@@ -353,21 +376,25 @@ export class Orchestrator {
       timestamp: new Date().toISOString(),
     };
 
-    while (iteration - iteratorState.fallbackRetries < maxIterations && !this.isShuttingDown) {
-      iteration++;
+    try {
+      while (iteration - iteratorState.fallbackRetries < maxIterations && !this.isShuttingDown && !this.isInterrupted) {
+        iteration++;
 
-      // Iniciar temporizador en vivo de pensamiento
-      const leaderName = this.leaderDriver.displayName;
-      TUI.startThinking(leaderName);
-      const thinkStart = performance.now();
+        // Iniciar temporizador en vivo de pensamiento
+        const leaderName = this.leaderDriver.displayName;
+        TUI.startThinking(leaderName);
+        const thinkStart = performance.now();
 
-      let responseRaw: string;
-      try {
-        responseRaw = await this.leaderDriver.sendMessage(nextPrompt);
-        this.sendFailures = 0;
-      } catch (err) {
-        TUI.stopThinking();
-        this.sendFailures++;
+        let responseRaw: string;
+        try {
+          responseRaw = await this.leaderDriver.sendMessage(nextPrompt);
+          this.sendFailures = 0;
+        } catch (err) {
+          TUI.stopThinking();
+          if (this.isInterrupted) {
+            break;
+          }
+          this.sendFailures++;
         logger.error(`Error de comunicación con ${this.leaderDriver.displayName}`, err);
 
         const fallback = this.getNextFallback();
@@ -534,18 +561,27 @@ export class Orchestrator {
       } else {
         nextPrompt = `[OBSERVATION FAILED]:\n${toolResult.output || toolResult.error}\n\nAnaliza la causa del error, ajusta tu plan y responde en formato JSON.`;
       }
+      if (iteration - iteratorState.fallbackRetries >= maxIterations) {
+        logger.warn(`Se alcanzó el límite de pasos ReAct (${maxIterations}).`);
+      }
     }
+  } finally {
+    this.isTurnRunning = false;
+      TUI.stopThinking();
 
-    // Persistir registro de turno y sesión en disco
-    this.currentSession.turns.push(currentTurnRecord);
-    const finalChatUrl = this.leaderDriver.getChatUrl();
-    if (finalChatUrl) {
-      this.currentSession.chatUrl = finalChatUrl;
-    }
-    HistoryManager.saveSession(this.currentSession);
+      // Persistir registro de turno y sesión en disco
+      if (currentTurnRecord.thought || currentTurnRecord.actionType) {
+        this.currentSession.turns.push(currentTurnRecord);
+      }
+      const finalChatUrl = this.leaderDriver.getChatUrl();
+      if (finalChatUrl) {
+        this.currentSession.chatUrl = finalChatUrl;
+      }
+      HistoryManager.saveSession(this.currentSession);
 
-    if (iteration - iteratorState.fallbackRetries >= maxIterations) {
-      logger.warn(`Se alcanzó el límite de pasos ReAct (${maxIterations}).`);
+      if (this.isInterrupted) {
+        console.log(pc.yellow('\n[interrupted] Generación cancelada por el usuario.\n'));
+      }
     }
   }
 

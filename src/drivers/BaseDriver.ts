@@ -238,6 +238,52 @@ export abstract class BaseDriver {
   }
 
   /**
+   * Detiene en caliente la generación del LLM haciendo clic en el botón de stop o enviando Escape
+   */
+  public async stopGeneration(): Promise<boolean> {
+    if (!this.page) return false;
+    try {
+      for (const stopSel of this.config.selectors.stopButton) {
+        try {
+          const btn = this.page.locator(stopSel).first();
+          if (await btn.isVisible({ timeout: 200 })) {
+            await btn.click({ force: true, timeout: 500 });
+            return true;
+          }
+        } catch {
+          // Continuar
+        }
+      }
+
+      await this.page.keyboard.press('Escape');
+
+      return await this.page.evaluate(() => {
+        const stopSelectors = [
+          'div[role="button"][aria-label*="Stop"]',
+          'button[aria-label*="Stop"]',
+          'button[aria-label*="Detener"]',
+          '.ds-loading-icon',
+          'svg.ds-stop-icon',
+          'button:has(rect)',
+          'div:has(rect)',
+          'div[class*="stop"]',
+          'button[aria-label*="Stop response"]',
+        ];
+        for (const sel of stopSelectors) {
+          const el = document.querySelector(sel) as HTMLElement;
+          if (el && typeof el.click === 'function') {
+            el.click();
+            return true;
+          }
+        }
+        return false;
+      });
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Método abstracto para enviar prompt y esperar la respuesta completa del LLM
    */
   public abstract sendMessage(prompt: string): Promise<string>;

@@ -440,9 +440,15 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
   });
 
   rl.on('SIGINT', async () => {
-    console.log(pc.cyan('\nCerrando Barhel y guardando sesion...'));
-    await orchestrator.shutdown();
-    process.exit(0);
+    if (orchestrator.isTurnRunning) {
+      await orchestrator.interruptCurrentTurn();
+      rl.resume();
+      rl.prompt();
+    } else {
+      console.log(pc.cyan('\nCerrando Barhel y guardando sesion...'));
+      await orchestrator.shutdown();
+      process.exit(0);
+    }
   });
 
   rl.on('close', async () => {
