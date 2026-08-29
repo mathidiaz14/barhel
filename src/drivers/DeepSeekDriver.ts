@@ -229,7 +229,11 @@ export class DeepSeekDriver extends BaseDriver {
       }
 
       lastContent = currentContent;
-      await this.page.waitForTimeout(500);
+      try {
+        await this.page.waitForTimeout(500);
+      } catch {
+        break;
+      }
     }
   }
 

@@ -405,7 +405,7 @@ export class Orchestrator {
           this.sendFailures = 0;
         } catch (err) {
           TUI.stopThinking();
-          if (this.isInterrupted) {
+          if (this.isInterrupted || this.isShuttingDown) {
             break;
           }
           this.sendFailures++;

@@ -445,6 +445,15 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
     const input = (rawLine || '').trim();
     if (!input) continue;
 
+    // Salir directamente al tipear exit, quit, salir, :q, q
+    const lower = input.toLowerCase();
+    if (lower === 'exit' || lower === 'quit' || lower === 'salir' || lower === ':q' || lower === 'q') {
+      console.log(pc.cyan('\nCerrando Barhel y guardando sesion...'));
+      await orchestrator.shutdown();
+      printExitMessage();
+      process.exit(0);
+    }
+
     // Si el usuario escribe "/" o "/menu", abre la paleta de busqueda
     if (input === '/' || input === '/menu') {
       try {
