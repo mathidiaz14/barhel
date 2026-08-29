@@ -96,6 +96,10 @@ export class Orchestrator {
     this.setupProcessSignals();
   }
 
+  public get isClosing(): boolean {
+    return this.isShuttingDown;
+  }
+
   public getSession(): ChatSession {
     return this.currentSession;
   }

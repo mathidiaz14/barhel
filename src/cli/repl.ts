@@ -111,15 +111,6 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
     return [hits.length ? hits : allCmds, linePartial];
   };
 
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-    prompt: TUI.getPromptPrefix('barhel'),
-    completer,
-  });
-
-  rl.prompt();
-
   // Funcion ejecutora de comandos
   const runCommand = async (command: string, arg: string): Promise<void> => {
     switch (command) {
@@ -347,7 +338,6 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
         console.log(pc.cyan('\nCerrando Barhel y guardando sesion...'));
         await orchestrator.shutdown();
         printExitMessage();
-        rl.close();
         process.exit(0);
 
       default:
@@ -404,25 +394,65 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
     await runCommand(selectedCommand, finalArg);
   };
 
-  rl.on('line', async (line: string) => {
-    const input = line.trim();
+  const askInput = (): Promise<string> => {
+    return new Promise((resolve) => {
+      if (process.stdin.isTTY) {
+        try {
+          process.stdin.setRawMode(false);
+        } catch {
+          // Ignorar
+        }
+      }
+      process.stdin.resume();
 
-    if (!input) {
-      rl.prompt();
-      return;
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+        prompt: TUI.getPromptPrefix('barhel'),
+        completer,
+      });
+
+      const onSigint = async () => {
+        if (orchestrator.isTurnRunning) {
+          await orchestrator.interruptCurrentTurn();
+        } else {
+          console.log(pc.cyan('\nCerrando Barhel y guardando sesion...'));
+          await orchestrator.shutdown();
+          printExitMessage();
+          process.exit(0);
+        }
+      };
+
+      process.once('SIGINT', onSigint);
+
+      rl.question(TUI.getPromptPrefix('barhel'), (answer) => {
+        process.removeListener('SIGINT', onSigint);
+        rl.close();
+        resolve(answer);
+      });
+    });
+  };
+
+  // Loop interactivo robusto que nunca se congela tras el uso de menús
+  while (!orchestrator.isClosing) {
+    let rawLine: string;
+    try {
+      rawLine = await askInput();
+    } catch {
+      break;
     }
+
+    const input = (rawLine || '').trim();
+    if (!input) continue;
 
     // Si el usuario escribe "/" o "/menu", abre la paleta de busqueda
     if (input === '/' || input === '/menu') {
-      rl.pause();
       try {
         await openInteractiveMenu('');
       } catch {
         // Ignorar cancelacion
       }
-      rl.resume();
-      rl.prompt();
-      return;
+      continue;
     }
 
     // Manejo de Slash Commands directos
@@ -435,7 +465,6 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
         (c) => c.name === command || c.aliases?.includes(command)
       );
 
-      rl.pause();
       try {
         if (isKnown) {
           await runCommand(command, arg);
@@ -446,38 +475,18 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
       } catch (cmdErr) {
         logger.error('Error al ejecutar comando', cmdErr);
       }
-      rl.resume();
-      rl.prompt();
-      return;
+      continue;
     }
 
     // Turno conversacional normal con el agente
-    rl.pause();
     try {
       await orchestrator.runTurn(input);
     } catch (err) {
       logger.error('Error durante la ejecucion del turno', err);
     }
-    rl.resume();
-    rl.prompt();
-  });
+  }
 
-  rl.on('SIGINT', async () => {
-    if (orchestrator.isTurnRunning) {
-      await orchestrator.interruptCurrentTurn();
-      rl.resume();
-      rl.prompt();
-    } else {
-      console.log(pc.cyan('\nCerrando Barhel y guardando sesion...'));
-      await orchestrator.shutdown();
-      printExitMessage();
-      process.exit(0);
-    }
-  });
-
-  rl.on('close', async () => {
-    await orchestrator.shutdown();
-    printExitMessage();
-    process.exit(0);
-  });
+  await orchestrator.shutdown();
+  printExitMessage();
+  process.exit(0);
 }
