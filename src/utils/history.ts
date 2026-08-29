@@ -6,10 +6,17 @@ import { select } from '@inquirer/prompts';
 import pc from 'picocolors';
 import { encryptObject, decryptToObject, isEncryptionEnabled } from './crypto.js';
 
+export interface ActionRecord {
+  type: string;
+  details?: Record<string, unknown>;
+  outputPreview?: string;
+}
+
 export interface TurnRecord {
   prompt: string;
   thought?: string;
   actionType?: string;
+  actions?: ActionRecord[];
   summary?: string;
   timestamp: string;
 }

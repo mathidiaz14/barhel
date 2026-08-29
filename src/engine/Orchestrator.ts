@@ -452,6 +452,17 @@ export class Orchestrator {
       currentTurnRecord.thought = thought;
       currentTurnRecord.actionType = action.type;
       currentTurnRecord.summary = action.summary;
+      currentTurnRecord.actions = currentTurnRecord.actions || [];
+      currentTurnRecord.actions.push({
+        type: action.type,
+        details: {
+          path: action.path,
+          command: action.command,
+          agent: action.agent,
+          prompt: action.prompt,
+          summary: action.summary,
+        },
+      });
 
       // Mostrar razonamiento del modelo estilo Claude Code
       TUI.renderThought(thought, thinkDurationMs);

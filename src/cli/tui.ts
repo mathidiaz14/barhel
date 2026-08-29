@@ -297,6 +297,65 @@ export class TUI {
     console.log();
   }
 
+  /**
+   * Renderiza el historial previo de turnos al reanudar una sesión
+   */
+  public static renderSessionHistory(session: { id: string; title: string; turns: Array<{ prompt: string; thought?: string; summary?: string; timestamp?: string; actions?: Array<{ type: string; details?: Record<string, unknown> }> }> }): void {
+    if (!session.turns || session.turns.length === 0) return;
+
+    console.log(`  ${pc.bold('Historial previo de la sesión')} ${pc.cyan(`"${session.title}"`)} ${pc.dim(`(#${session.id} • ${session.turns.length} turnos)`)}`);
+    console.log(`  ${pc.gray('─'.repeat(88))}`);
+
+    session.turns.forEach((turn, idx) => {
+      const time = turn.timestamp ? turn.timestamp.substring(11, 16) : '';
+      console.log(`\n  ${pc.bold(pc.white(`[Turno ${idx + 1}]`))} ${pc.dim(time)}`);
+      console.log(`  ${pc.blue('user ❯')} ${pc.white(turn.prompt)}`);
+
+      if (turn.thought) {
+        const thoughtPrev = turn.thought.length > 120 ? turn.thought.substring(0, 117) + '...' : turn.thought;
+        console.log(`  ${pc.yellow('+ Thought:')} ${pc.dim(thoughtPrev)}`);
+      }
+
+      if (turn.actions && turn.actions.length > 0) {
+        for (const act of turn.actions) {
+          switch (act.type) {
+            case 'read_file':
+              console.log(`  ${pc.dim('→')} ${pc.white('Read')} ${pc.cyan(String(act.details?.path || ''))}`);
+              break;
+            case 'write_file':
+              console.log(`  ${pc.green('→')} ${pc.white('Write')} ${pc.cyan(String(act.details?.path || ''))}`);
+              break;
+            case 'list_directory':
+            case 'glob':
+              console.log(`  ${pc.yellow('*')} ${pc.white('Glob')} ${pc.cyan(`"${act.details?.path || act.details?.pattern || '.'}"`)}`);
+              break;
+            case 'run_command':
+              console.log(`  ${pc.white('$')} ${pc.dim(String(act.details?.command || ''))}`);
+              break;
+            case 'delegate_task':
+              console.log(`  ${pc.magenta('→')} ${pc.magenta(`Delegate [${String(act.details?.agent || '').toUpperCase()}]`)}`);
+              break;
+            case 'finish':
+              break;
+            default:
+              console.log(`  ${pc.dim('→')} ${pc.white(act.type)}`);
+              break;
+          }
+        }
+      }
+
+      if (turn.summary) {
+        console.log(`  ${pc.green('✓')} ${pc.white(turn.summary)}`);
+      }
+    });
+
+    console.log();
+    console.log(`  ${pc.gray('─'.repeat(88))}`);
+    console.log(`  ${pc.dim('Puedes continuar conversando y enviando instrucciones abajo:')}`);
+    console.log(`  ${pc.gray('─'.repeat(88))}`);
+    console.log();
+  }
+
   public static getPromptPrefix(leaderName = 'barhel'): string {
     return `${pc.cyan(leaderName)} ${pc.gray('❯')} `;
   }

@@ -89,6 +89,10 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
   console.clear();
   printCurrentBanner();
 
+  if (orchestrator.getSession().turns.length > 0) {
+    TUI.renderSessionHistory(orchestrator.getSession());
+  }
+
   try {
     await orchestrator.initSession();
   } catch (err) {
@@ -144,7 +148,9 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
         const selected = await HistoryManager.promptSelectSession(workdir);
         if (selected) {
           await orchestrator.switchSession(selected.id);
+          console.clear();
           printCurrentBanner();
+          TUI.renderSessionHistory(orchestrator.getSession());
           console.log(pc.green(`[ok] Sesion reanudada: "${selected.title}" (#${selected.id})\n`));
         }
         break;
