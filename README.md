@@ -24,9 +24,7 @@ barhel ❯
 
 ### Opción A: Instalación directa con NPM (Recomendado)
 ```bash
-npm install -g barhel
-# O directamente desde GitHub:
-# npm install -g github:tu-usuario/barhel
+npm install -g github:mathidiaz14/barhel
 ```
 
 > **Nota:** Barhel usa **Playwright** para controlar el navegador. Asegúrate de tener el navegador Chromium instalado:
