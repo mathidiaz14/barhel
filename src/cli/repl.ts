@@ -73,6 +73,7 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
   };
 
   const printCurrentBanner = () => {
+    console.clear();
     const leaderMeta = DriverFactory.getMeta(orchestrator.getLeaderId());
     const leaderName = leaderMeta?.name || orchestrator.getLeaderId();
     const workersNames = orchestrator.getActiveWorkers().join(', ');
@@ -87,7 +88,6 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
     );
   };
 
-  console.clear();
   printCurrentBanner();
 
   if (orchestrator.getSession().turns.length > 0) {
