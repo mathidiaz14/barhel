@@ -1,6 +1,5 @@
 import { BaseDriver } from './BaseDriver.js';
 import { ProviderConfig, ProviderType } from '../types/providers.js';
-import { logger } from '../utils/logger.js';
 
 export const PERPLEXITY_CONFIG: ProviderConfig = {
   id: ProviderType.PERPLEXITY,
@@ -104,7 +103,6 @@ export class PerplexityDriver extends BaseDriver {
       await inputLocator.press('Enter');
     }
 
-    logger.info('Esperando respuesta de Perplexity Web...');
     await this.page.waitForTimeout(2000);
 
     let streaming = true;

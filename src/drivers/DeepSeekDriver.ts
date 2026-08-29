@@ -1,6 +1,5 @@
 import { BaseDriver } from './BaseDriver.js';
 import { ProviderConfig, ProviderType } from '../types/providers.js';
-import { logger } from '../utils/logger.js';
 
 export const DEEPSEEK_CONFIG: ProviderConfig = {
   id: ProviderType.DEEPSEEK,
@@ -130,53 +129,31 @@ export class DeepSeekDriver extends BaseDriver {
 
     await this.page.waitForTimeout(300);
 
-    // 2. Disparar envío: Presionar Enter y clickear el botón de enviar
+    // 2. Disparar envío: click en el botón de enviar, con Enter como fallback
+    //    (evita un doble envío al combinar Enter + click).
     await inputLocator.focus();
-    await this.page.keyboard.press('Enter');
     await this.page.waitForTimeout(200);
 
-    // Click en botón de enviar mediante evaluate directo en el DOM
-    await this.page.evaluate(() => {
-      const buttons = Array.from(
-        document.querySelectorAll(
-          'div.ds-icon-button, button[type="submit"], div[role="button"]:has(svg), button:has(svg), div[class*="send"]'
-        )
-      );
-
-      for (const btn of buttons) {
-        const aria = btn.getAttribute('aria-label') || '';
-        const cls = btn.className || '';
-        if (aria.includes('Stop') || cls.includes('stop')) continue;
-
-        if (
-          aria.toLowerCase().includes('send') ||
-          aria.toLowerCase().includes('enviar') ||
-          cls.includes('send') ||
-          cls.includes('ds-icon-button')
-        ) {
-          (btn as HTMLElement).click();
-        }
-      }
-    });
-
-    // Fallback con locators de Playwright
-    for (const sel of this.config.selectors.sendButton) {
+    let sent = false;
+    const sendSelector = await this.findFirstVisibleSelector(this.config.selectors.sendButton);
+    if (sendSelector) {
       try {
-        const btn = this.page.locator(sel).last();
-        if (await btn.isVisible({ timeout: 200 })) {
-          await btn.click({ timeout: 400, force: true });
+        const sendBtn = this.page.locator(sendSelector).first();
+        if (await sendBtn.isEnabled({ timeout: 800 })) {
+          await sendBtn.click({ timeout: 400, force: true });
+          sent = true;
         }
       } catch {
-        // Ignorar
+        // Fallback a Enter
       }
     }
 
-    logger.startSpinner('DeepSeek está razonando y generando respuesta...');
+    if (!sent) {
+      await inputLocator.press('Enter');
+    }
 
     // 3. Esperar generación y streaming
     await this.waitForCompletion();
-
-    logger.stopSpinner();
 
     // 4. Extraer el texto de la última respuesta
     const responseText = await this.extractLatestResponse();

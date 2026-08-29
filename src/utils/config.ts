@@ -7,11 +7,21 @@ import { ProviderType } from '../types/providers.js';
 import { AVAILABLE_PROVIDERS, DriverFactory } from '../drivers/DriverFactory.js';
 import { logger } from './logger.js';
 
+export interface CommandPoliciesConfig {
+  deny?: string[];
+  allow?: string[];
+}
+
 export interface BarhelConfig {
   leader: string;
   workers: string[];
   autonomousDefault?: boolean;
   maxIterations?: number;
+  commandPolicies?: CommandPoliciesConfig;
+  fallbackOrder?: string[];
+  autoSummarize?: boolean;
+  autoCommit?: boolean;
+  checkCommands?: string[];
 }
 
 const CONFIG_DIR = path.join(os.homedir(), '.dev-agent-sessions');
@@ -87,6 +97,10 @@ export class ConfigManager {
       workers,
       autonomousDefault: currentConfig?.autonomousDefault ?? false,
       maxIterations: currentConfig?.maxIterations ?? 25,
+      commandPolicies: currentConfig?.commandPolicies,
+      fallbackOrder: currentConfig?.fallbackOrder,
+      autoSummarize: currentConfig?.autoSummarize ?? true,
+      autoCommit: currentConfig?.autoCommit ?? false,
     };
 
     this.saveConfig(newConfig);

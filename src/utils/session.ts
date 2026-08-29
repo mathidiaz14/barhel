@@ -2,6 +2,7 @@ import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
 import { ProviderType } from '../types/providers.js';
+import { AVAILABLE_PROVIDERS } from '../drivers/DriverFactory.js';
 
 const SESSIONS_BASE_DIR = path.join(os.homedir(), '.dev-agent-sessions');
 
@@ -20,19 +21,6 @@ export function getProviderSessionPath(provider: ProviderType | string): string 
   }
   return providerPath;
 }
-
-export function checkSessionExists(provider: ProviderType | string): boolean {
-  const providerPath = getProviderSessionPath(provider);
-  try {
-    const files = fs.readdirSync(providerPath);
-    // Chromium persistent context typically creates Default/ or multiple profile files
-    return files.length > 0;
-  } catch {
-    return false;
-  }
-}
-
-import { AVAILABLE_PROVIDERS } from '../drivers/DriverFactory.js';
 
 export function listSessionsStatus(): Record<string, { path: string; exists: boolean; fileCount: number }> {
   const providers = Object.keys(AVAILABLE_PROVIDERS);

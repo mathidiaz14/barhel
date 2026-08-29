@@ -80,7 +80,7 @@ export class DriverFactory {
   public static createDriver(providerId?: string): BaseDriver {
     const raw = providerId || ProviderType.DEEPSEEK;
     const normalized = String(raw).toLowerCase().trim();
-    const meta = AVAILABLE_PROVIDERS[normalized] || AVAILABLE_PROVIDERS[ProviderType.DEEPSEEK];
+    const meta = AVAILABLE_PROVIDERS[normalized];
     if (!meta) {
       const valid = Object.keys(AVAILABLE_PROVIDERS).join(', ');
       throw new Error(`Proveedor desconocido: "${providerId}". Disponibles: ${valid}`);

@@ -6,7 +6,6 @@ export enum ProviderType {
   QWEN = 'qwen',
   MISTRAL = 'mistral',
   PERPLEXITY = 'perplexity',
-  GROK = 'grok',
 }
 
 export interface ProviderSelectors {

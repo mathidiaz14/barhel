@@ -4,6 +4,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { select } from '@inquirer/prompts';
 import pc from 'picocolors';
+import { encryptObject, decryptToObject, isEncryptionEnabled } from './crypto.js';
 
 export interface TurnRecord {
   prompt: string;
@@ -23,9 +24,12 @@ export interface ChatSession {
   createdAt: string;
   updatedAt: string;
   turns: TurnRecord[];
+  summary?: string;
+  lastSummarizedTurnIndex?: number;
 }
 
-const SESSIONS_HISTORY_DIR = path.join(os.homedir(), '.dev-agent-sessions', 'history');
+const SESSIONS_HISTORY_DIR =
+  process.env.BARHEL_HISTORY_DIR || path.join(os.homedir(), '.dev-agent-sessions', 'history');
 
 export class HistoryManager {
   private static ensureDir(): void {
@@ -65,30 +69,56 @@ export class HistoryManager {
   }
 
   /**
-   * Guarda o actualiza una sesión en disco
+   * Guarda o actualiza una sesión en disco (cifrada si BARHEL_SECRET está definido)
    */
   public static saveSession(session: ChatSession): void {
     this.ensureDir();
     session.updatedAt = new Date().toISOString();
-    const filePath = path.join(SESSIONS_HISTORY_DIR, `${session.id}.json`);
-    fs.writeFileSync(filePath, JSON.stringify(session, null, 2), 'utf-8');
+
+    const jsonContent = JSON.stringify(session, null, 2);
+    const plainPath = path.join(SESSIONS_HISTORY_DIR, `${session.id}.json`);
+
+    if (isEncryptionEnabled()) {
+      const encPath = path.join(SESSIONS_HISTORY_DIR, `${session.id}.json.enc`);
+      fs.writeFileSync(encPath, encryptObject(session), 'utf-8');
+      // Evitar dejar copia en claro si quedaba un .json previo
+      if (fs.existsSync(plainPath)) {
+        try {
+          fs.unlinkSync(plainPath);
+        } catch {
+          // Ignorar fallo de limpieza
+        }
+      }
+    } else {
+      fs.writeFileSync(plainPath, jsonContent, 'utf-8');
+    }
   }
 
   /**
-   * Obtiene una sesión por su ID
+   * Obtiene una sesión por su ID (soporta archivos .json y .json.enc)
    */
   public static getSession(id: string): ChatSession | null {
     this.ensureDir();
-    const cleanId = id.replace('.json', '').trim();
-    const filePath = path.join(SESSIONS_HISTORY_DIR, `${cleanId}.json`);
+    const cleanId = id.replace(/\.json(\.enc)?$/, '').trim();
 
-    try {
-      if (fs.existsSync(filePath)) {
+    const fileCandidates = [
+      path.join(SESSIONS_HISTORY_DIR, `${cleanId}.json.enc`),
+      path.join(SESSIONS_HISTORY_DIR, `${cleanId}.json`),
+    ];
+
+    for (const filePath of fileCandidates) {
+      try {
+        if (!fs.existsSync(filePath)) continue;
         const raw = fs.readFileSync(filePath, 'utf-8');
+        if (filePath.endsWith('.enc')) {
+          const session = decryptToObject<ChatSession>(raw);
+          if (session) return session;
+          continue;
+        }
         return JSON.parse(raw) as ChatSession;
+      } catch {
+        // Probar siguiente candidato
       }
-    } catch {
-      // Ignorar error de lectura
     }
     return null;
   }
@@ -99,7 +129,14 @@ export class HistoryManager {
   public static listSessions(): ChatSession[] {
     this.ensureDir();
     try {
-      const files = fs.readdirSync(SESSIONS_HISTORY_DIR).filter((f) => f.endsWith('.json'));
+      const files = fs
+        .readdirSync(SESSIONS_HISTORY_DIR)
+        .filter((f) => f.endsWith('.json') && !f.endsWith('.json.enc'));
+
+      const encFiles = fs
+        .readdirSync(SESSIONS_HISTORY_DIR)
+        .filter((f) => f.endsWith('.json.enc'));
+
       const sessions: ChatSession[] = [];
 
       for (const file of files) {
@@ -111,10 +148,78 @@ export class HistoryManager {
         }
       }
 
+      for (const file of encFiles) {
+        try {
+          const raw = fs.readFileSync(path.join(SESSIONS_HISTORY_DIR, file), 'utf-8');
+          const session = decryptToObject<ChatSession>(raw);
+          if (session) sessions.push(session);
+        } catch {
+          // Ignorar archivos corruptos o sin secret
+        }
+      }
+
       return sessions.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
     } catch {
       return [];
     }
+  }
+
+  /**
+   * Comprueba si existen sesiones cifradas que requieren BARHEL_SECRET para leerse
+   */
+  public static hasEncryptedSessions(): boolean {
+    try {
+      if (!fs.existsSync(SESSIONS_HISTORY_DIR)) return false;
+      return fs.readdirSync(SESSIONS_HISTORY_DIR).some((f) => f.endsWith('.json.enc'));
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Convierte una sesión a Markdown legible para documentación/exportación
+   */
+  public static sessionToMarkdown(session: ChatSession): string {
+    const lines: string[] = [];
+    lines.push(`# Sesión Barhel: ${session.title}`);
+    lines.push('');
+    lines.push(`- **ID:** ${session.id}`);
+    lines.push(`- **Creada:** ${session.createdAt}`);
+    lines.push(`- **Actualizada:** ${session.updatedAt}`);
+    lines.push(`- **Directorio:** \`${session.workdir}\``);
+    lines.push(`- **Líder:** ${session.leader}`);
+    lines.push(`- **Workers:** ${session.workers.join(', ') || 'ninguno'}`);
+    if (session.chatUrl) lines.push(`- **Chat web:** ${session.chatUrl}`);
+    if (session.summary) {
+      lines.push('');
+      lines.push('## Resumen de memoria');
+      lines.push('');
+      lines.push(session.summary);
+    }
+    lines.push('');
+    lines.push(`## Conversación (${session.turns.length} turnos)`);
+    lines.push('');
+
+    for (let i = 0; i < session.turns.length; i++) {
+      const turn = session.turns[i];
+      lines.push(`### Turno ${i + 1} — ${turn.timestamp}`);
+      lines.push('');
+      lines.push(`**Usuario:** ${turn.prompt}`);
+      if (turn.thought) lines.push('');
+      lines.push(`**Pensamiento:** ${turn.thought || ''}`);
+      lines.push('');
+      lines.push(`**Acción:** \`${turn.actionType || 'desconocida'}\``);
+      if (turn.summary) {
+        lines.push('');
+        lines.push(`**Resumen de acción:** ${turn.summary}`);
+      }
+      lines.push('');
+      lines.push('---');
+      lines.push('');
+    }
+
+    lines.push(`*Exportado por Barhel v2.*`);
+    return lines.join('\n');
   }
 
   /**

@@ -1,6 +1,5 @@
 import { BaseDriver } from './BaseDriver.js';
 import { ProviderConfig, ProviderType } from '../types/providers.js';
-import { logger } from '../utils/logger.js';
 
 export const CLAUDE_CONFIG: ProviderConfig = {
   id: ProviderType.CLAUDE,
@@ -115,7 +114,6 @@ export class ClaudeDriver extends BaseDriver {
       await inputLocator.press('Enter');
     }
 
-    logger.info('Esperando respuesta de Claude Web...');
     await this.page.waitForTimeout(2000);
 
     // Esperar a que el streaming termine

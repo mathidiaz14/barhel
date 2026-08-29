@@ -1,6 +1,5 @@
 import { BaseDriver } from './BaseDriver.js';
 import { ProviderConfig, ProviderType } from '../types/providers.js';
-import { logger } from '../utils/logger.js';
 
 export const CHATGPT_CONFIG: ProviderConfig = {
   id: ProviderType.CHATGPT,
@@ -117,10 +116,8 @@ export class ChatGPTDriver extends BaseDriver {
       await inputLocator.press('Enter');
     }
 
-    logger.startSpinner('ChatGPT (Worker) está procesando la subtarea...');
     await this.page.waitForTimeout(2500);
     await this.waitForCompletion();
-    logger.stopSpinner();
 
     const responseText = await this.extractLatestResponse();
     if (!responseText) {

@@ -29,11 +29,17 @@ npm install -g barhel
 # npm install -g github:tu-usuario/barhel
 ```
 
+> **Nota:** Barhel usa **Playwright** para controlar el navegador. Asegúrate de tener el navegador Chromium instalado:
+> ```bash
+> npx playwright install chromium
+> ```
+
 ### Opción B: Instalación local para desarrollo
 ```bash
 git clone <url-del-repo>
 cd barhel
 npm install
+npm run browsers   # instala el Chromium de Playwright
 npm run build
 npm link
 ```
@@ -56,6 +62,23 @@ barhel config
 - 👑/👥 **Qwen Chat (Qwen 2.5 Coder)** (`chat.qwen.ai`)
 - 👑/👥 **Mistral Le Chat (Codestral)** (`chat.mistral.ai`)
 - 👥 **Perplexity AI** (`perplexity.ai`)
+
+### Configuración avanzada (`~/.dev-agent-sessions/config.json`)
+Además de `leader`/`workers`, puedes editar a mano:
+
+| Campo | Descripción |
+| :--- | :--- |
+| `autonomousDefault` | Arrancar en modo autónomo (`true`/`false`) |
+| `maxIterations` | Límite de pasos ReAct por instrucción |
+| `commandPolicies.deny` | Regex de comandos **siempre bloqueados** (ej. `["rm -rf", "mkfs"]`) |
+| `commandPolicies.allow` | Regex de comandos que **no piden confirmación** (ej. `["^npm test$"]`) |
+| `fallbackOrder` | Proveedores de respaldo del Líder (ej. `["chatgpt", "gemini"]`) |
+| `autoSummarize` | Generar resumen de memoria al cerrar (default `true`) |
+| `autoCommit` | Commit automático al terminar en modo autónomo (default `false`) |
+
+> 🛡️ **Denylist por defecto:** comandos como `rm -rf`, `mkfs`, `> /dev/sd*`, `curl|sh`, `shutdown`, `git push --force` están bloqueados incluso en modo autónomo.
+
+> 👥 **Fallback de líder:** si el proveedor primario falla 2 veces seguidas, Barhel cambia automáticamente a `fallbackOrder` (nuevo hilo web para ese proveedor).
 
 ---
 
@@ -101,6 +124,34 @@ barhel resume <sessionId>
 barhel history
 ```
 
+### Exportar una sesión:
+```bash
+barhel export <sessionId>                # Markdown (default)
+barhel export <sessionId> --format json  # JSON crudo
+barhel export <sessionId> --out ./docs/  # carpeta de salida
+```
+
+### Memoría a largo plazo
+Al cerrar (`finish` o `Ctrl+C`), Barhel resume automáticamente los turnos nuevos con el Líder y guarda el resumen en la sesión. Al reanudar, ese resumen se reinyecta como contexto (configurable con `autoSummarize` en `config.json`). Puedes generarlo manualmente con `/summarize`.
+
+### Diagnóstico de proveedores (`barhel doctor`)
+Verifica que los selectores de UI de cada proveedor sigan presentes (detecta cambios de interfaz que rompan los drivers):
+```bash
+barhel doctor
+barhel doctor --provider deepseek
+```
+
+### Cifrar las sesiones guardadas (`BARHEL_SECRET`)
+Define la variable de entorno `BARHEL_SECRET` para guardar las sesiones del historial cifradas con **AES-256-GCM** (archivos `.json.enc`). Sin la variable, se guardan en claro como antes.
+```bash
+# Windows (PowerShell)
+$env:BARHEL_SECRET = "mi-clave-secreta"
+
+# Linux/macOS
+export BARHEL_SECRET="mi-clave-secreta"
+```
+> ⚠️ Si rotas `BARHEL_SECRET`, las sesiones `.json.enc` existentes dejarán de poder leerse. `/status` avisa si hay sesiones cifradas sin clave.
+
 ---
 
 ## 🚀 Cómo Usar Barhel
@@ -127,7 +178,15 @@ Durante tu conversación en Barhel, puedes usar comandos especiales con `/`:
 | `/title <texto>` | Renombra el título descriptivo de la sesión actual |
 | `/sessions` o `/list` | Muestra el listado de sesiones recientes guardadas en el disco |
 | `/config` o `/models` | Cambia interactivamente el modelo Líder y Workers al vuelo |
+| `/leader <id>` | Cambia el modelo Líder manualmente (deepseek, claude, chatgpt, gemini, ...) |
 | `/auto` | Alterna entre **Modo Autónomo** (sin confirmaciones) y **Modo Seguro** (`[y/N]`) |
+| `/plan` | Alterna **Modo PLAN ONLY**: el lider simula escrituras/comandos sin aplicarlos |
+| `/commit [mensaje]` | Hace `git add -A` + `git commit` de los cambios del workspace |
+| `/review` | Muestra `git status` + `git diff` del workspace |
+| `/explain <tema>` | Pide al Líder que explique un símbolo/archivo sin modificar nada |
+| `/fix [error]` | Pide al Líder que ejecute `check` y corrija los errores de tipo/lint |
+| `/summarize` | Genera el resumen de memoria de la sesión (memoria a largo plazo) |
+| `/export [json|md]` | Exporta la sesión actual a Markdown o JSON |
 | `/status` | Comprueba el estado de las credenciales web guardadas |
 | `/login [proveedor]` | Inicia sesión en cualquier proveedor sin salir del chat |
 | `/clear` | Limpia la pantalla de la terminal |
@@ -146,6 +205,12 @@ barhel "Inspecciona el proyecto y añade TypeScript con tsconfig.json"
 # Modo 100% autónomo (-a)
 barhel -a "Crea una suite de pruebas unitarias con Vitest y ejecútalas"
 
+# Modo PLAN ONLY: simula los cambios y termina con el plan (sin modificar archivos)
+barhel --plan "Refactoriza el módulo de autenticación"
+
+# Notificación sonora al terminar
+barhel --notify -a "Ejecuta los tests del proyecto"
+
 # Opciones adicionales
 barhel --headless -a -w "./otro-proyecto" "Refactoriza el módulo de autenticación"
 ```
@@ -156,26 +221,47 @@ barhel --headless -a -w "./otro-proyecto" "Refactoriza el módulo de autenticaci
 
 ```text
 barhel/
-├── package.json               # Dependencias (Playwright, Commander, Picocolors, Ora)
+├── package.json               # Dependencias (Playwright, Commander, Picocolors, Ora, Inquirer)
 ├── tsconfig.json              # Configuración TypeScript ESM / NodeNext
 ├── bin/
-│   └── run.ts                 # Entrypoint del ejecutable 'barhel'
-└── src/
-    ├── cli/
-    │   └── repl.ts            # Módulo de Chat Interactivo REPL (barhel ❯)
-    ├── types/
-    │   ├── actions.ts         # Tipos e interfaces ReAct y herramientas
-    │   └── providers.ts       # Configuración de URLs y selectores de LLMs
-    ├── drivers/
-    │   ├── BaseDriver.ts      # Contexto persistente, anti-bot y ciclo de vida
-    │   ├── DeepSeekDriver.ts  # Driver web para DeepSeek Chat (Líder)
-    │   ├── ChatGPTDriver.ts   # Driver web para ChatGPT (Worker)
-    │   └── GeminiDriver.ts    # Driver web para Gemini (Worker)
-    ├── engine/
-    │   ├── ToolEngine.ts      # Ejecución local de FS y comandos de terminal
-    │   ├── ResponseParser.ts  # Extractor y validador resiliente de JSON
-    │   └── Orchestrator.ts    # Orquestador del Loop ReAct multi-turno
-    └── utils/
-        ├── logger.ts          # Banner de Barhel, formato con colores y spinners
-        └── session.ts         # Rutas de sesiones en ~/.dev-agent-sessions/
+│   └── run.ts                 # Entrypoint del ejecutable 'barhel' (CLI Commander)
+├── src/
+│   ├── cli/
+│   │   ├── repl.ts            # Módulo de Chat Interactivo REPL y slash commands
+│   │   └── tui.ts             # Renderizado estilo OpenCode/Claude Code (banner, spinner, inspector)
+│   ├── types/
+│   │   ├── actions.ts         # Tipos e interfaces ReAct y herramientas
+│   │   └── providers.ts       # Enum de proveedores y configuración de selectores
+│   ├── drivers/
+│   │   ├── BaseDriver.ts      # Contexto persistente, ciclo de vida y anti-detección
+│   │   ├── DriverFactory.ts   # Registro de proveedores disponibles
+│   │   ├── DeepSeekDriver.ts  # Driver web para DeepSeek Chat (Líder)
+│   │   ├── ChatGPTDriver.ts   # Driver web para ChatGPT (Worker)
+│   │   ├── GeminiDriver.ts    # Driver web para Gemini (Worker)
+│   │   ├── ClaudeDriver.ts    # Driver web para Claude
+│   │   ├── QwenDriver.ts      # Driver web para Qwen Chat
+│   │   ├── MistralDriver.ts   # Driver web para Mistral Le Chat
+│   │   └── PerplexityDriver.ts# Driver web para Perplexity AI
+│   ├── engine/
+│   │   ├── ToolEngine.ts      # Herramientas FS/terminal (read/write/list/grep/glob/check), plan-only, políticas de comandos, diff preview
+│   │   ├── ResponseParser.ts  # Extractor y validador resiliente de JSON (incluye delegate_batch)
+│   │   └── Orchestrator.ts    # Loop ReAct multi-turno, worker paralelos, fallback de líder, memoria a largo plazo, auto-commit
+│   └── utils/
+│       ├── logger.ts          # Logs con colores y delegación de spinner
+│       ├── spinner.ts         # Spinner único compartido (evita spinners superpuestos)
+│       ├── config.ts          # Configuración persistente de modelos + políticas/fallback/automatización
+│       ├── history.ts         # Sesiones y turnos en ~/.dev-agent-sessions/history (cifrado AES-256-GCM opcional)
+│       ├── session.ts         # Rutas de perfiles de navegador por proveedor
+│       ├── crypto.ts          # Cifrado/descifrado AES-256-GCM con BARHEL_SECRET
+│       ├── git.ts             # Helpers git (status/diff/commit) con exec compartido
+│       ├── exec.ts            # Ejecutor de comandos promisificado (STDOUT/STDERR combinados)
+│       ├── version.ts         # Lectura de versión centralizada desde package.json
+│       └── workerStore.ts     # Analisis en memoria de los workers (inspector /workers)
+└── test/
+    ├── response-parser.test.ts # Tests de parsing/validación JSON (incluye grep/glob/check/delegate_batch)
+    ├── toolengine.test.ts      # Tests de contención de rutas, grep/glob, plan-only y políticas
+    ├── crypto.test.ts          # Tests de cifrado/descifrado AES-256-GCM
+    └── history.test.ts         # Tests de sesiones, cifrado en disco y export Markdown
 ```
+
+> **Nota:** Las herramientas del `ToolEngine` verifican que toda ruta (leer/escribir/explorar) permanezca dentro del `--workdir` actual, incluyendo defensa contra `..` y symlinks, incluso en modo autónomo.

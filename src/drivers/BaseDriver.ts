@@ -52,7 +52,7 @@ export abstract class BaseDriver {
       return;
     }
 
-    const sessionDir = getProviderSessionPath(this.config.id);
+    const sessionDir = getProviderSessionPath(this.config.sessionDirName);
     const userAgent =
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
@@ -226,8 +226,8 @@ export abstract class BaseDriver {
   }
 
   /**
-   * Helper seguro para encontrar un elemento entre una lista de selectores alternativos con reintentos
-   */
+ * Helper seguro para encontrar un elemento entre una lista de selectores alternativos con reintentos
+ */
   protected async findFirstVisibleSelector(selectors: string[], timeoutMs = 8000): Promise<string | null> {
     if (!this.page) return null;
     const start = Date.now();
@@ -245,5 +245,26 @@ export abstract class BaseDriver {
       await this.page.waitForTimeout(400);
     }
     return null;
+  }
+
+  /**
+   * Verifica que los selectores clave del proveedor sigan presentes en la página.
+   * Usado por el subcomando "barhel doctor" para detectar cambios de UI.
+   */
+  public async verifyUI(): Promise<{ name: string; found: boolean; selector?: string }[]> {
+    if (!this.page) return [];
+
+    const checks = [
+      { name: 'inputPrompt', selectors: this.config.selectors.inputPrompt },
+      { name: 'sendButton', selectors: this.config.selectors.sendButton },
+      { name: 'responseContainer', selectors: this.config.selectors.responseContainer },
+    ];
+
+    const results: { name: string; found: boolean; selector?: string }[] = [];
+    for (const ch of checks) {
+      const selector = await this.findFirstVisibleSelector(ch.selectors, 6000);
+      results.push({ name: ch.name, found: selector !== null, selector: selector ?? undefined });
+    }
+    return results;
   }
 }

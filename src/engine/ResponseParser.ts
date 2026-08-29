@@ -14,7 +14,11 @@ export class ResponseParser {
     'write_file',
     'run_command',
     'list_directory',
+    'grep',
+    'glob',
+    'check',
     'delegate_task',
+    'delegate_batch',
     'finish',
   ];
 
@@ -97,11 +101,11 @@ export class ResponseParser {
   }
 
   /**
-   * Sanitiza barras invertidas no escapadas (comunes en rutas de Windows como C:\laragon\...)
+   * Sanitiza barras invertidas no escapadas (comunes en rutas de Windows como C:\laragon\...).
+   * El lookbehind negativo evita tocar escapes JSON ya válidos (\\, \n, \t, \uXXXX, ...).
    */
   private static sanitizeJsonString(jsonStr: string): string {
-    // Reemplazar barras invertidas que no formen escapes válidos de JSON
-    return jsonStr.replace(/\\(?!["\\/bfnrt]|u[0-9a-fA-F]{4})/g, '\\\\');
+    return jsonStr.replace(/(?<!\\)\\(?!["\\/bfnrt]|u[0-9a-fA-F]{4})/g, '\\\\');
   }
 
   /**
@@ -152,12 +156,51 @@ export class ResponseParser {
           return 'Para "run_command", el campo "action.command" es obligatorio.';
         }
         break;
+      case 'list_directory':
+        if (action.path !== undefined && typeof action.path !== 'string') {
+          return 'Para "list_directory", el campo "action.path" debe ser un string.';
+        }
+        break;
+      case 'grep':
+        if (!action.pattern || typeof action.pattern !== 'string') {
+          return 'Para "grep", el campo "action.pattern" es obligatorio.';
+        }
+        if (action.path !== undefined && typeof action.path !== 'string') {
+          return 'Para "grep", el campo "action.path" debe ser un string.';
+        }
+        break;
+      case 'glob':
+        if (!action.pattern || typeof action.pattern !== 'string') {
+          return 'Para "glob", el campo "action.pattern" es obligatorio.';
+        }
+        if (action.path !== undefined && typeof action.path !== 'string') {
+          return 'Para "glob", el campo "action.path" debe ser un string.';
+        }
+        break;
+      case 'check':
+        break;
       case 'delegate_task':
         if (!action.agent || typeof action.agent !== 'string') {
           return 'Para "delegate_task", "action.agent" es obligatorio.';
         }
         if (!action.prompt || typeof action.prompt !== 'string') {
           return 'Para "delegate_task", el campo "action.prompt" es obligatorio.';
+        }
+        break;
+      case 'delegate_batch':
+        if (!Array.isArray(action.tasks) || action.tasks.length === 0) {
+          return 'Para "delegate_batch", el campo "action.tasks" es obligatorio y debe contener al menos una tarea.';
+        }
+        for (const task of action.tasks) {
+          if (!task || typeof task !== 'object') {
+            return 'Cada tarea de "delegate_batch" debe ser un objeto.';
+          }
+          if (!task.agent || typeof task.agent !== 'string') {
+            return 'Cada tarea de "delegate_batch" debe incluir "agent".';
+          }
+          if (!task.prompt || typeof task.prompt !== 'string') {
+            return 'Cada tarea de "delegate_batch" debe incluir "prompt".';
+          }
         }
         break;
       case 'finish':
@@ -175,13 +218,10 @@ export class ResponseParser {
    */
   private static tryRepairJson(jsonStr: string): unknown | null {
     try {
-      // 1. Arreglar barras invertidas ilegales (Windows paths)
-      let cleaned = jsonStr.replace(/\\(?!["\\/bfnrt]|u[0-9a-fA-F]{4})/g, '\\\\');
+      // 1. Arreglar barras invertidas ilegales (Windows paths) sin tocar escapes válidos
+      let cleaned = this.sanitizeJsonString(jsonStr);
 
-      // 2. Arreglar barras invertidas en nombres de carpeta como \barhel
-      cleaned = cleaned.replace(/([a-zA-Z0-9_])\\([a-zA-Z0-9_])/g, '$1\\\\$2');
-
-      // 3. Eliminar comas finales en arrays u objetos
+      // 2. Eliminar comas finales en arrays u objetos
       cleaned = cleaned.replace(/,\s*([\]}])/g, '$1');
 
       return JSON.parse(cleaned);
@@ -200,12 +240,17 @@ Debes responder ESTRICTAMENTE con un bloque JSON parseable con esta estructura:
 {
   "thought": "Tu análisis y justificación aquí...",
   "action": {
-    "type": "read_file" | "write_file" | "run_command" | "list_directory" | "delegate_task" | "finish",
+    "type": "read_file" | "write_file" | "run_command" | "list_directory" | "grep" | "glob" | "check" | "delegate_task" | "delegate_batch" | "finish",
     "path": "ruta/al/archivo",
     "content": "contenido a escribir",
     "command": "comando terminal",
+    "pattern": "patrón regex o glob",
     "agent": "chatgpt | gemini | claude | qwen",
     "prompt": "instrucción para el worker",
+    "tasks": [
+      { "agent": "chatgpt", "prompt": "instrucción para un worker, se ejecutan en paralelo" },
+      { "agent": "gemini", "prompt": "instrucción para otro worker" }
+    ],
     "summary": "resumen del trabajo"
   }
 }

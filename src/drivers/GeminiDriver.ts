@@ -1,6 +1,5 @@
 import { BaseDriver } from './BaseDriver.js';
 import { ProviderConfig, ProviderType } from '../types/providers.js';
-import { logger } from '../utils/logger.js';
 
 export const GEMINI_CONFIG: ProviderConfig = {
   id: ProviderType.GEMINI,
@@ -118,10 +117,8 @@ export class GeminiDriver extends BaseDriver {
       await inputLocator.press('Enter');
     }
 
-    logger.startSpinner('Gemini (Worker) está procesando la subtarea...');
     await this.page.waitForTimeout(2500);
     await this.waitForCompletion();
-    logger.stopSpinner();
 
     const responseText = await this.extractLatestResponse();
     if (!responseText) {

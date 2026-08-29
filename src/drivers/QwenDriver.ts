@@ -1,6 +1,5 @@
 import { BaseDriver } from './BaseDriver.js';
 import { ProviderConfig, ProviderType } from '../types/providers.js';
-import { logger } from '../utils/logger.js';
 
 export const QWEN_CONFIG: ProviderConfig = {
   id: ProviderType.QWEN,
@@ -106,7 +105,6 @@ export class QwenDriver extends BaseDriver {
       await inputLocator.press('Enter');
     }
 
-    logger.info('Esperando respuesta de Qwen Web...');
     await this.page.waitForTimeout(2000);
 
     let streaming = true;

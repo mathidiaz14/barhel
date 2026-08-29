@@ -13,11 +13,11 @@
   "scripts": {
     "build": "tsc",
     "prepublishOnly": "tsc",
-    "postinstall": "playwright install chromium",
+    "browsers": "playwright install chromium",
     "start": "node dist/bin/run.js",
     "dev": "tsx bin/run.ts",
     "login": "tsx bin/run.ts login",
-    "test": "echo \"No tests specified\" && exit 0"
+    "test": "node --import tsx --test test/response-parser.test.ts test/toolengine.test.ts test/crypto.test.ts test/history.test.ts"
   },
   "keywords": [
     "barhel",
@@ -47,6 +47,8 @@
   "dependencies": {
     "@inquirer/prompts": "^8.7.0",
     "commander": "^12.1.0",
+    "diff": "^9.0.0",
+    "fast-glob": "^3.3.3",
     "ora": "^8.1.0",
     "picocolors": "^1.1.1",
     "playwright": "^1.48.0"

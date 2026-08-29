@@ -1,22 +1,33 @@
+import { ProviderType } from './providers.js';
+
+export type WorkerAgentType = ProviderType | string;
+
+export interface DelegateTask {
+  agent: WorkerAgentType;
+  prompt: string;
+}
+
 export type ActionType =
   | 'read_file'
   | 'write_file'
   | 'run_command'
   | 'list_directory'
+  | 'grep'
+  | 'glob'
+  | 'check'
   | 'delegate_task'
+  | 'delegate_batch'
   | 'finish';
-
-import { ProviderType } from './providers.js';
-
-export type WorkerAgentType = ProviderType | string;
 
 export interface ActionPayload {
   type: ActionType;
   path?: string;
   content?: string;
   command?: string;
+  pattern?: string;
   agent?: WorkerAgentType;
   prompt?: string;
+  tasks?: DelegateTask[];
   summary?: string;
 }
 
@@ -43,4 +54,6 @@ export interface CLIOptions {
   sessionId?: string;
   resume?: boolean;
   isNewSession?: boolean;
+  planOnly?: boolean;
+  watchNotify?: boolean;
 }

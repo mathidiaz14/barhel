@@ -1,14 +1,14 @@
 import pc from 'picocolors';
-import ora, { Ora } from 'ora';
 import path from 'node:path';
 import { select } from '@inquirer/prompts';
-import { WorkerStore, WorkerAnalysisRecord } from '../utils/workerStore.js';
+import { WorkerStore } from '../utils/workerStore.js';
+import { startSpinner, stopSpinner, updateSpinnerText, isSpinnerActive } from '../utils/spinner.js';
+import { getBarhelVersion } from '../utils/version.js';
 
 export class TUI {
-  private static activeSpinner: Ora | null = null;
   private static thinkingStartTime = 0;
   private static timerInterval: NodeJS.Timeout | null = null;
-  private static showFullThinking = false; // OpenCode style shows concise "+ Thought: 159ms" by default
+  private static showFullThinking = false;
 
   public static toggleThinkingDisplay(): boolean {
     this.showFullThinking = !this.showFullThinking;
@@ -19,33 +19,22 @@ export class TUI {
     return this.showFullThinking;
   }
 
-  /**
-   * Inicia el spinner con temporizador de alta resolución en tiempo real estilo OpenCode
-   */
   public static startThinking(modelName = 'Líder', customText?: string): void {
     this.stopThinking();
 
     this.thinkingStartTime = Date.now();
     const baseText = customText || `${modelName} pensando`;
 
-    this.activeSpinner = ora({
-      text: `${pc.yellow('✻')} ${pc.dim(baseText)} ${pc.yellow('(0.0s)')}`,
-      color: 'yellow',
-      spinner: 'dots',
-    }).start();
+    startSpinner(`${pc.cyan('⏺')} ${pc.dim(baseText)} ${pc.cyan('(0.0s)')}`, 'cyan');
 
-    // Actualizar el contador en vivo
     this.timerInterval = setInterval(() => {
-      if (this.activeSpinner && this.activeSpinner.isSpinning) {
+      if (isSpinnerActive()) {
         const elapsedSec = ((Date.now() - this.thinkingStartTime) / 1000).toFixed(1);
-        this.activeSpinner.text = `${pc.yellow('✻')} ${pc.dim(baseText)} ${pc.yellow(`(${elapsedSec}s)`)}`;
+        updateSpinnerText(`${pc.cyan('⏺')} ${pc.dim(baseText)} ${pc.cyan(`(${elapsedSec}s)`)}`);
       }
     }, 100);
   }
 
-  /**
-   * Detiene el spinner de pensamiento y retorna el tiempo transcurrido en ms
-   */
   public static stopThinking(): number {
     if (this.timerInterval) {
       clearInterval(this.timerInterval);
@@ -55,27 +44,20 @@ export class TUI {
     const elapsedMs = this.thinkingStartTime > 0 ? Date.now() - this.thinkingStartTime : 0;
     this.thinkingStartTime = 0;
 
-    if (this.activeSpinner && this.activeSpinner.isSpinning) {
-      this.activeSpinner.stop();
-      this.activeSpinner = null;
-    }
+    stopSpinner();
 
     return elapsedMs;
   }
 
-  /**
-   * Renderiza el bloque de pensamiento exactamente con la visual de OpenCode: "+ Thought: 159ms"
-   */
   public static renderThought(thought: string, durationMs?: number): void {
     this.stopThinking();
 
     const timeStr = durationMs !== undefined ? `${durationMs}ms` : '0ms';
-    console.log(`${pc.yellow(pc.bold('+ Thought:'))} ${pc.yellow(timeStr)}`);
+    console.log(`${pc.green(pc.bold('⏺ Thought:'))} ${pc.green(timeStr)}`);
 
-    // Si el usuario activó la vista expandida con /think, mostrar el cuerpo completo
     if (this.showFullThinking) {
       const lines = thought.trim().split('\n');
-      console.log(pc.gray('┌─') + pc.dim(' [Razonamiento extendido]'));
+      console.log(pc.gray('┌─') + pc.dim(' [Extended reasoning]'));
       for (const line of lines) {
         console.log(`${pc.gray('│')} ${pc.italic(pc.dim(line))}`);
       }
@@ -83,24 +65,21 @@ export class TUI {
     }
   }
 
-  /**
-   * Renderiza la invocación de herramientas estilo OpenCode (→ Read, * Glob, $ Command)
-   */
   public static renderAction(type: string, details: Record<string, unknown>): void {
     this.stopThinking();
 
     switch (type) {
       case 'read_file':
-        console.log(`${pc.dim('→')} ${pc.white('Read')} ${pc.cyan(String(details.path || ''))}`);
+        console.log(`${pc.dim('⏺')} ${pc.white('Read')} ${pc.cyan(String(details.path || ''))}`);
         break;
 
       case 'write_file':
         const len = typeof details.content === 'string' ? details.content.length : 0;
-        console.log(`${pc.green('→')} ${pc.white('Write')} ${pc.cyan(String(details.path || ''))} ${pc.dim(`(${len} bytes)`)}`);
+        console.log(`${pc.green('⏺')} ${pc.white('Write')} ${pc.cyan(String(details.path || ''))} ${pc.dim(`(${len} bytes)`)}`);
         break;
 
       case 'list_directory':
-        console.log(`${pc.yellow('*')} ${pc.white('Glob')} ${pc.cyan(`"${details.path || '.'}/**/*"`)}`);
+        console.log(`${pc.yellow('⏺')} ${pc.white('Glob')} ${pc.cyan(`"${details.path || '.'}/**/*"`)}`);
         break;
 
       case 'run_command':
@@ -110,22 +89,39 @@ export class TUI {
       case 'delegate_task':
         const agent = String(details.agent || 'worker').toUpperCase();
         const promptPreview = String(details.prompt || '').substring(0, 60);
-        console.log(`${pc.magenta('🗲')} ${pc.magenta(pc.bold(`Delegate [${agent}]`))} ${pc.dim(`"${promptPreview}..."`)}`);
+        console.log(`${pc.magenta('⏺')} ${pc.magenta(pc.bold(`Task [${agent}]`))} ${pc.dim(`"${promptPreview}..."`)}`);
+        break;
+
+      case 'delegate_batch':
+        const taskCount = Array.isArray(details.tasks) ? details.tasks.length : 0;
+        const agents = Array.isArray(details.tasks)
+          ? details.tasks.map((t) => (typeof t === 'object' && t ? String((t as { agent?: string }).agent || '?') : '?').toUpperCase()).join(', ')
+          : '';
+        console.log(`${pc.magenta('⏺')} ${pc.magenta(pc.bold(`Batch [${agents || taskCount + ' tareas'}]`))} ${pc.dim(`(${taskCount} workers en paralelo)`)}`);
+        break;
+
+      case 'grep':
+        console.log(`${pc.blue('⏺')} ${pc.white('Search')} ${pc.cyan(String(details.pattern || ''))} ${pc.dim(`en ${details.path || '.'}`)}`);
+        break;
+
+      case 'glob':
+        console.log(`${pc.blue('⏺')} ${pc.white('Glob')} ${pc.cyan(`"${details.pattern || ''}"`)} ${pc.dim(`en ${details.path || '.'}`)}`);
+        break;
+
+      case 'check':
+        console.log(`${pc.cyan('⏺')} ${pc.white('Check')} ${pc.dim('(typecheck/lint/build del proyecto)')}`);
         break;
 
       case 'finish':
-        console.log(`\n${pc.green('✔')} ${pc.green(pc.bold('Objetivo Completado:'))} ${pc.white(String(details.summary || ''))}\n`);
+        console.log(`\n${pc.green('✓')} ${pc.green(pc.bold('Completed:'))} ${pc.white(String(details.summary || ''))}\n`);
         break;
 
       default:
-        console.log(`${pc.dim('→')} ${pc.white(type)} ${pc.dim(JSON.stringify(details))}`);
+        console.log(`${pc.dim('⏺')} ${pc.white(type)} ${pc.dim(JSON.stringify(details))}`);
         break;
     }
   }
 
-  /**
-   * Renderiza el resultado de herramientas con caja estilo ventana de consola de OpenCode
-   */
   public static renderToolResult(toolType: string, success: boolean, output: string): void {
     this.stopThinking();
 
@@ -133,22 +129,18 @@ export class TUI {
     if (!cleanOutput) return;
 
     const lines = cleanOutput.split('\n');
-    const previewLines = lines.slice(0, 15);
+    const previewLines = lines.slice(0, 20);
 
-    // Caja oscura minimalista estilo ventana terminal OpenCode
     console.log(pc.gray('┌' + '─'.repeat(70)));
     for (const line of previewLines) {
       console.log(`${pc.gray('│')} ${line}`);
     }
-    if (lines.length > 15) {
-      console.log(`${pc.gray('│')} ${pc.dim(`... (${lines.length - 15} líneas más. Usa /workers o revisa el log)`)}`);
+    if (lines.length > 20) {
+      console.log(`${pc.gray('│')} ${pc.dim(`... (${lines.length - 20} more lines)`)}`);
     }
     console.log(pc.gray('└' + '─'.repeat(70)) + '\n');
   }
 
-  /**
-   * Renderiza la tarjeta de asistencia de un agente secundario (Worker) estilo OpenCode
-   */
   public static renderWorkerDelegation(
     workerName: string,
     subtaskPrompt: string,
@@ -166,32 +158,29 @@ export class TUI {
       durationMs,
     });
 
-    console.log(`${brand.color(pc.bold('🗲 Worker:'))} ${brand.color(brand.label)} ${pc.dim(`[#${record.id}]`)} ${pc.yellow(durationText)}`);
-    console.log(`${pc.dim('  Subtarea:')} ${pc.italic(subtaskPrompt)}`);
+    console.log(`${brand.color(pc.bold('⏺ Agent:'))} ${brand.color(brand.label)} ${pc.dim(`[#${record.id}]`)} ${pc.green(durationText)}`);
+    console.log(`${pc.dim('  Task:')} ${pc.italic(subtaskPrompt)}`);
 
-    const preview = response.trim().split('\n').slice(0, 6);
+    const preview = response.trim().split('\n').slice(0, 8);
     console.log(brand.border('  ┌' + '─'.repeat(60)));
     for (const line of preview) {
       console.log(`  ${brand.border('│')} ${pc.dim(line)}`);
     }
-    if (response.trim().split('\n').length > 6) {
-      console.log(`  ${brand.border('│')} ${pc.cyan(pc.italic(`... (Análisis completo en /workers #${record.id})`))}`);
+    if (response.trim().split('\n').length > 8) {
+      console.log(`  ${brand.border('│')} ${pc.cyan(pc.italic(`... (Full analysis in /workers #${record.id})`))}`);
     }
     console.log(brand.border('  └' + '─'.repeat(60)) + '\n');
   }
 
-  /**
-   * Modal interactivo para inspeccionar el análisis completo de los agentes
-   */
   public static async promptWorkerInspection(): Promise<void> {
     const records = WorkerStore.getRecords();
 
     if (records.length === 0) {
-      console.log(pc.yellow('\n⚠ No hay análisis de agentes registrados en esta sesión.\n'));
+      console.log(pc.yellow('\n⚠ No agent analysis recorded in this session.\n'));
       return;
     }
 
-    console.log(pc.cyan('\n🔍 Inspector de Análisis de Agentes Secundarios:'));
+    console.log(pc.cyan('\n🔍 Agent Analysis Inspector:'));
 
     const choices = records.map((r) => {
       const brand = this.getWorkerBrand(r.workerName);
@@ -201,18 +190,18 @@ export class TUI {
       return {
         name: `${brand.color(pc.bold(`[#${r.id}] ${brand.label}`))} - ${pc.dim(promptPreview)} ${pc.gray(`(${timeStr})`)}`,
         value: r.id,
-        description: `Prompt: "${r.subtaskPrompt}" | Tamaño: ${r.fullResponse.length} caracteres`,
+        description: `Task: "${r.subtaskPrompt}" | Size: ${r.fullResponse.length} chars`,
       };
     });
 
     choices.push({
-      name: pc.gray('← Volver al chat'),
+      name: pc.gray('← Back to chat'),
       value: '__back__',
-      description: 'Cierra el inspector y vuelve a la línea de comandos',
+      description: 'Close inspector and return to command line',
     });
 
     const selectedId = await select({
-      message: 'Selecciona el análisis que deseas leer completo:',
+      message: 'Select analysis to view:',
       choices,
     });
 
@@ -222,17 +211,14 @@ export class TUI {
     if (record) {
       const brand = this.getWorkerBrand(record.workerName);
       console.log('\n' + brand.border('═'.repeat(70)));
-      console.log(`${brand.color(pc.bold(`📋 ANÁLISIS COMPLETO DE ${brand.label.toUpperCase()} (#${record.id})`))}`);
-      console.log(`${pc.dim('Instrucción:')} ${pc.cyan(record.subtaskPrompt)}`);
+      console.log(`${brand.color(pc.bold(`📋 FULL ANALYSIS: ${brand.label.toUpperCase()} (#${record.id})`))}`);
+      console.log(`${pc.dim('Task:')} ${pc.cyan(record.subtaskPrompt)}`);
       console.log(brand.border('─'.repeat(70)));
       console.log(record.fullResponse.trim());
       console.log(brand.border('═'.repeat(70)) + '\n');
     }
   }
 
-  /**
-   * Banner estilo ventana OpenCode (con barra de título, logo ASCII y panel de contexto)
-   */
   public static renderBanner(
     workdir: string = process.cwd(),
     autonomous = false,
@@ -242,54 +228,61 @@ export class TUI {
     sessionId?: string
   ): void {
     const dirName = path.basename(workdir) || workdir;
-    const modeBadge = autonomous ? pc.bgGreen(pc.black(' AUTONOMOUS ')) : pc.bgYellow(pc.black(' SAFE MODE '));
-    const sessionName = sessionTitle || 'Sesión de desarrollo';
-    const idBadge = sessionId ? `#${sessionId}` : '#nueva';
+    const modeBadge = autonomous 
+      ? pc.bgGreen(pc.black(' AUTO ')) 
+      : pc.bgYellow(pc.black(' SAFE '));
+    const sessionName = sessionTitle || 'Session';
+    const idBadge = sessionId ? `#${sessionId.slice(0, 8)}` : '#new';
 
-    const b = pc.gray;
-    const cy = pc.cyan;
+    const dim = pc.dim;
+    const white = pc.white;
+    const cyan = pc.cyan;
+    const gray = pc.gray;
+    const bold = pc.bold;
 
-    console.log(`
-${b('╭─')} ${pc.red('●')} ${pc.yellow('●')} ${pc.green('●')} ${b('─'.repeat(8))} ${pc.bold(pc.white(`OC | ${sessionName}`))} ${b('─'.repeat(Math.max(2, 45 - sessionName.length)))} ${pc.dim('v1.0.0')} ${b('─╮')}
-${b('│')}                                                                          ${b('│')}
-${b('│')}     ${cy(pc.bold('____             __          __'))}                                   ${b('│')}
-${b('│')}    ${cy(pc.bold('/ __ )____ ______/ /_  ___   / /'))}   ${pc.dim('Autonomous CLI Agent')}           ${b('│')}
-${b('│')}   ${cy(pc.bold('/ __  / __ `/ ___/ __ \\/ _ \\ / / '))}  ${pc.dim('Powered by Web LLMs')}            ${b('│')}
-${b('│')}  ${cy(pc.bold('/ /_/ / /_/ / /  / / / /  __// /  '))}                                 ${b('│')}
-${b('│')} ${cy(pc.bold('/_____/\\__,_/_/  /_/ /_/\\___//_/   '))}  ${pc.magenta(pc.bold('OpenCode Engine'))}                 ${b('│')}
-${b('│')}                                                                          ${b('│')}
-${b('├' + '─'.repeat(74) + '┤')}
-${b('│')} ${pc.dim('Contexto  :')} ${pc.bold(pc.white(sessionName))} ${pc.dim(`(${idBadge})`)}
-${b('│')} ${pc.dim('Workspace :')} ${pc.white(workdir)} ${pc.dim(':main')}
-${b('│')} ${pc.dim('Líder     :')} ${pc.bold(pc.cyan(leaderName))}
-${b('│')} ${pc.dim('Workers   :')} ${pc.yellow(workersStr || 'Ninguno')} ${pc.dim('(usa /config)')}
-${b('│')} ${pc.dim('Modo      :')} ${modeBadge} ${pc.dim('(usa /auto para alternar)')}
-${b('├' + '─'.repeat(74) + '┤')}
-${b('│')} ${pc.dim('Comandos  :')} ${pc.cyan('/workers')} ${pc.dim('análisis')} │ ${pc.cyan('/think')} ${pc.dim('toggle')} │ ${pc.cyan('/resume')} │ ${pc.cyan('/new')} │ ${pc.cyan('/help')}
-${b('╰' + '─'.repeat(74) + '╯')}
-`);
+    const version = getBarhelVersion();
+    const barhelLogo = `${bold(white('barhel'))} ${dim(`v${version}`)}`;
+
+    console.log();
+    console.log(`  ${gray('┌' + '─'.repeat(60))}`);
+    console.log(`  ${gray('│')}  ${barhelLogo}  ${dim(`(${idBadge})`)}`);
+    console.log(`  ${gray('├' + '─'.repeat(60))}`);
+    console.log(`  ${gray('│')}  ${dim('Dir:')}  ${white(dirName)}  ${dim(workdir)}`);
+    console.log(`  ${gray('│')}  ${dim('Model:')}  ${cyan(bold(leaderName))}`);
+    if (workersStr) {
+      console.log(`  ${gray('│')}  ${dim('Agents:')}  ${pc.yellow(workersStr)}`);
+    }
+    console.log(`  ${gray('│')}  ${dim('Mode:')}  ${modeBadge}`);
+    console.log(`  ${gray('└' + '─'.repeat(60))}`);
+    console.log();
+    console.log(`  ${dim('Tip:')}  ${cyan('/')} for commands  ${dim('•')}  ${cyan('Ctrl+C')} to exit`);
+    console.log();
   }
 
-  /**
-   * Imprime la barra de prompt estilo OpenCode
-   */
-  public static getPromptPrefix(leaderName = 'Barhel'): string {
-    return `${pc.blue('▌')} ${pc.bold(pc.white(leaderName))} ${pc.gray('❯')} `;
+  public static getPromptPrefix(leaderName = 'barhel'): string {
+    return `${pc.green('>')} ${pc.dim(leaderName)} ${pc.gray('›')} `;
+  }
+
+  public static renderWelcome(): void {
+    console.log();
+    console.log(`  ${pc.bold(pc.white('Welcome to barhel'))}`);
+    console.log(`  ${pc.dim('Your AI coding assistant')}`);
+    console.log();
   }
 
   private static getWorkerBrand(workerName: string): { label: string; color: (s: string) => string; border: (s: string) => string } {
     const key = workerName.toLowerCase();
     if (key.includes('claude')) {
-      return { label: 'Claude (Anthropic)', color: pc.magenta, border: pc.magenta };
+      return { label: 'Claude', color: pc.magenta, border: pc.magenta };
     }
     if (key.includes('chatgpt') || key.includes('openai')) {
-      return { label: 'ChatGPT (OpenAI)', color: pc.green, border: pc.green };
+      return { label: 'ChatGPT', color: pc.green, border: pc.green };
     }
     if (key.includes('gemini') || key.includes('google')) {
-      return { label: 'Gemini (Google)', color: pc.blue, border: pc.blue };
+      return { label: 'Gemini', color: pc.blue, border: pc.blue };
     }
     if (key.includes('qwen')) {
-      return { label: 'Qwen (Alibaba)', color: pc.cyan, border: pc.cyan };
+      return { label: 'Qwen', color: pc.cyan, border: pc.cyan };
     }
     if (key.includes('mistral')) {
       return { label: 'Mistral', color: pc.yellow, border: pc.yellow };

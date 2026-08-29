@@ -1,6 +1,5 @@
 import { BaseDriver } from './BaseDriver.js';
 import { ProviderConfig, ProviderType } from '../types/providers.js';
-import { logger } from '../utils/logger.js';
 
 export const MISTRAL_CONFIG: ProviderConfig = {
   id: ProviderType.MISTRAL,
@@ -102,7 +101,6 @@ export class MistralDriver extends BaseDriver {
       await inputLocator.press('Enter');
     }
 
-    logger.info('Esperando respuesta de Mistral Web...');
     await this.page.waitForTimeout(2000);
 
     let streaming = true;
