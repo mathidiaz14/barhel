@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import { select } from '@inquirer/prompts';
 import pc from 'picocolors';
 import { encryptObject, decryptToObject, isEncryptionEnabled } from './crypto.js';
+import { TodoItem } from '../types/actions.js';
 
 export interface ActionRecord {
   type: string;
@@ -17,6 +18,7 @@ export interface TurnRecord {
   thought?: string;
   actionType?: string;
   actions?: ActionRecord[];
+  todos?: TodoItem[];
   summary?: string;
   timestamp: string;
 }
@@ -31,6 +33,7 @@ export interface ChatSession {
   createdAt: string;
   updatedAt: string;
   turns: TurnRecord[];
+  todos?: TodoItem[];
   summary?: string;
   lastSummarizedTurnIndex?: number;
 }

@@ -2,7 +2,7 @@ import { BaseDriver } from '../drivers/BaseDriver.js';
 import { DriverFactory } from '../drivers/DriverFactory.js';
 import { ToolEngine } from './ToolEngine.js';
 import { ResponseParser } from './ResponseParser.js';
-import { CLIOptions, WorkerAgentType } from '../types/actions.js';
+import { CLIOptions, WorkerAgentType, TodoItem } from '../types/actions.js';
 import { ProviderType } from '../types/providers.js';
 import { logger } from '../utils/logger.js';
 import { ConfigManager } from '../utils/config.js';
@@ -22,6 +22,7 @@ export class Orchestrator {
   private toolEngine: ToolEngine;
   private options: CLIOptions;
   private currentSession: ChatSession;
+  private currentTodos: TodoItem[] = [];
   private isShuttingDown = false;
   private isInitialized = false;
   private turnCount = 0;
@@ -66,6 +67,10 @@ export class Orchestrator {
         this.currentSession = existing;
         this.leaderId = existing.leader;
         this.activeWorkers = existing.workers;
+        this.currentSession.updatedAt = new Date().toISOString();
+        if (this.currentSession.todos) {
+          this.currentTodos = this.currentSession.todos;
+        }
       } else {
         this.currentSession = HistoryManager.createSession({
           workdir: this.options.workdir,
@@ -472,6 +477,14 @@ export class Orchestrator {
       // Mostrar razonamiento del modelo estilo Claude Code
       TUI.renderThought(thought, thinkDurationMs);
 
+      // Si el modelo emitió un plan de tareas (todos), renderizarlo en pantalla y persistirlo
+      if (parseResult.data.todos && parseResult.data.todos.length > 0) {
+        this.currentTodos = parseResult.data.todos;
+        currentTurnRecord.todos = this.currentTodos;
+        this.currentSession.todos = this.currentTodos;
+        TUI.renderTodoList(this.currentTodos);
+      }
+
       // Mostrar acción a ejecutar con diff coloreado si es modificación de código
       if (action.type === 'write_file' && action.path) {
         const fullPath = path.resolve(this.toolEngine.getWorkdir(), action.path);
@@ -769,6 +782,12 @@ Debes responder SIEMPRE Y EXCLUSIVAMENTE con un único bloque JSON válido:
 \`\`\`json
 {
   "thought": "Explicación detallada de tu razonamiento, análisis de código y próximos pasos a seguir.",
+  "todos": [
+    { "task": "Explorar y analizar la estructura del proyecto", "status": "completed", "assignedTo": "leader" },
+    { "task": "Modificar controladores y modelos", "status": "in_progress", "assignedTo": "leader" },
+    { "task": "Delegar análisis de seguridad a Claude", "status": "pending", "assignedTo": "claude" },
+    { "task": "Ejecutar pruebas y validar compilación", "status": "pending", "assignedTo": "leader" }
+  ],
   "action": {
     "type": "read_file" | "write_file" | "run_command" | "list_directory" | "grep" | "glob" | "check" | "delegate_task" | "delegate_batch" | "finish",
     "path": "ruta/relativa/archivo",
@@ -785,6 +804,12 @@ Debes responder SIEMPRE Y EXCLUSIVAMENTE con un único bloque JSON válido:
   }
 }
 \`\`\`
+
+PLAN DE TAREAS DINÁMICO (TODO LIST):
+- Cuando la tarea requiera varios pasos o delegación a subagentes, incluye SIEMPRE el array "todos".
+- Estados válidos de cada subtarea: "pending" | "in_progress" | "completed" | "failed".
+- Agentes asignados ("assignedTo"): "leader" o el worker correspondiente ("claude", "chatgpt", "gemini", etc.).
+- Actualiza este listado en cada respuesta marcando "completed" lo terminado y "in_progress" lo que estás ejecutando.
 
 HERRAMIENTAS DISPONIBLES:
 1. "list_directory": Explora la estructura de archivos del proyecto.
@@ -818,6 +843,6 @@ Comienza analizando el proyecto y decidiendo la primera acción en JSON.`;
 "${userGoal}"
 ${planNote}
 Continúa en este mismo contexto del workspace (${this.toolEngine.getWorkdir()}).
-Recuerda responder ESTRICTAMENTE en formato JSON con tu "thought" y tu "action" (read_file, write_file, run_command, list_directory, grep, glob, check, delegate_task, delegate_batch, finish).`;
+Recuerda responder ESTRICTAMENTE en formato JSON con tu "thought", tu lista "todos" actualizada y tu "action" (read_file, write_file, run_command, list_directory, grep, glob, check, delegate_task, delegate_batch, finish).`;
   }
 }

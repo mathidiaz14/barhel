@@ -127,6 +127,40 @@ export class TUI {
   }
 
   /**
+   * Renderiza el panel de lista de tareas (Todo Checklist) con estados y agentes asignados
+   */
+  public static renderTodoList(todos: Array<{ task: string; status: string; assignedTo?: string }>): void {
+    if (!todos || todos.length === 0) return;
+
+    const completedCount = todos.filter((t) => (t.status || '').toLowerCase() === 'completed' || (t.status || '').toLowerCase() === 'done').length;
+    const progressStr = `(${completedCount}/${todos.length} completadas)`;
+
+    console.log(`  ${pc.bold('Plan de tareas')} ${pc.dim(progressStr)}`);
+    console.log(pc.gray('  ┌────────────────────────────────────────────────────────────────────'));
+    todos.forEach((item, idx) => {
+      const num = `${idx + 1}.`;
+      let statusIcon = pc.dim('[ ]');
+      let taskText = pc.white(item.task);
+
+      const status = (item.status || 'pending').toLowerCase();
+      if (status === 'completed' || status === 'done') {
+        statusIcon = pc.green('[✓]');
+        taskText = pc.dim(pc.strikethrough ? pc.strikethrough(item.task) : item.task);
+      } else if (status === 'in_progress' || status === 'active' || status === 'running') {
+        statusIcon = pc.yellow('[▶]');
+        taskText = pc.yellow(pc.bold(item.task));
+      } else if (status === 'failed' || status === 'error') {
+        statusIcon = pc.red('[✖]');
+        taskText = pc.red(item.task);
+      }
+
+      const assigned = item.assignedTo ? pc.magenta(` [${item.assignedTo.toUpperCase()}]`) : '';
+      console.log(`  ${pc.gray('│')}  ${statusIcon} ${pc.dim(num)} ${taskText}${assigned}`);
+    });
+    console.log(pc.gray('  └────────────────────────────────────────────────────────────────────\n'));
+  }
+
+  /**
    * Renderiza la invocación de herramientas
    */
   public static renderAction(type: string, details: Record<string, unknown>): void {

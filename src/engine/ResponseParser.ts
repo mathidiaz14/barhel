@@ -122,6 +122,32 @@ export class ResponseParser {
       return 'El campo "thought" es obligatorio y debe ser un string con tu razonamiento.';
     }
 
+    if (Array.isArray(res.todos)) {
+      res.todos = res.todos.map((item) => {
+        if (typeof item === 'object' && item !== null) {
+          const t = item as Record<string, unknown>;
+          const rawStatus = String(t.status || 'pending').toLowerCase().trim();
+          let normStatus: 'pending' | 'in_progress' | 'completed' | 'failed' = 'pending';
+          if (rawStatus === 'completed' || rawStatus === 'done' || rawStatus === 'finished') {
+            normStatus = 'completed';
+          } else if (rawStatus === 'in_progress' || rawStatus === 'active' || rawStatus === 'running') {
+            normStatus = 'in_progress';
+          } else if (rawStatus === 'failed' || rawStatus === 'error') {
+            normStatus = 'failed';
+          }
+          return {
+            task: String(t.task || t.title || t.description || 'Tarea'),
+            status: normStatus,
+            assignedTo: t.assignedTo ? String(t.assignedTo) : undefined,
+          };
+        }
+        return {
+          task: String(item),
+          status: 'pending',
+        };
+      });
+    }
+
     if (!res.action || typeof res.action !== 'object') {
       return 'El campo "action" es obligatorio y debe ser un objeto.';
     }

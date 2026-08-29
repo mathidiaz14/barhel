@@ -31,8 +31,17 @@ export interface ActionPayload {
   summary?: string;
 }
 
+export type TodoStatus = 'pending' | 'in_progress' | 'completed' | 'failed';
+
+export interface TodoItem {
+  task: string;
+  status: TodoStatus;
+  assignedTo?: WorkerAgentType;
+}
+
 export interface AgentResponse {
   thought: string;
+  todos?: TodoItem[];
   action: ActionPayload;
 }
 
