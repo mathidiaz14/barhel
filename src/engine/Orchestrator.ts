@@ -195,7 +195,7 @@ export class Orchestrator {
       logger.warn('No hay turnos para resumir.');
       return this.currentSession.summary ?? null;
     }
-    return this.summarizeSessionInternal();
+    return this.summarizeSessionInternal(true);
   }
 
   /**
@@ -668,36 +668,50 @@ export class Orchestrator {
   /**
    * Resume los turnos nuevos de la sesión y persiste el resumen en memoria
    */
-  private async summarizeSessionInternal(): Promise<string | null> {
+  private async summarizeSessionInternal(useLLM = false): Promise<string | null> {
     const since = this.currentSession.lastSummarizedTurnIndex ?? 0;
     const newTurns = this.currentSession.turns.slice(since);
     if (newTurns.length === 0) {
       return this.currentSession.summary ?? null;
     }
 
-    logger.info(`Generando resumen de memoria de ${newTurns.length} turno(s) con ${this.leaderDriver.displayName}...`);
-    const content = newTurns
-      .map((t) => `USUARIO: ${t.prompt}\nACCIÓN: ${t.actionType || ''}\nRESULTADO: ${t.summary || ''}`)
-      .join('\n---\n');
+    if (useLLM && !this.isShuttingDown && this.isInitialized) {
+      logger.info(`Generando resumen de memoria de ${newTurns.length} turno(s) con ${this.leaderDriver.displayName}...`);
+      const content = newTurns
+        .map((t) => `USUARIO: ${t.prompt}\nACCIÓN: ${t.actionType || ''}\nRESULTADO: ${t.summary || ''}`)
+        .join('\n---\n');
 
-    try {
-      TUI.startThinking(this.leaderDriver.displayName, 'Resumiendo sesión para memoria a largo plazo');
-      const promptText = `Genera un resumen en español de 3-5 líneas de lo que se hizo y decidió en esta sesión de trabajo. Solo texto plano, sin JSON ni bloques de código:\n\n${content}`;
-      const raw = await this.leaderDriver.sendMessage(promptText);
-      TUI.stopThinking();
+      try {
+        TUI.startThinking(this.leaderDriver.displayName, 'Resumiendo sesión para memoria a largo plazo');
+        const promptText = `Genera un resumen en español de 3-5 líneas de lo que se hizo y decidió en esta sesión de trabajo. Solo texto plano, sin JSON ni bloques de código:\n\n${content}`;
+        const raw = await this.leaderDriver.sendMessage(promptText);
+        TUI.stopThinking();
 
-      const clean = raw.replace(/```/g, '').trim();
-      const previous = this.currentSession.summary;
-      this.currentSession.summary = [previous, clean].filter(Boolean).join('\n').slice(0, 4000);
-      this.currentSession.lastSummarizedTurnIndex = this.currentSession.turns.length;
-      HistoryManager.saveSession(this.currentSession);
-      logger.success('Resumen de memoria generado y guardado.');
-      return this.currentSession.summary;
-    } catch (err) {
-      TUI.stopThinking();
-      logger.warn(`No se pudo generar el resumen automático: ${err}`);
-      return this.currentSession.summary ?? null;
+        const clean = raw.replace(/```/g, '').trim();
+        const previous = this.currentSession.summary;
+        this.currentSession.summary = [previous, clean].filter(Boolean).join('\n').slice(0, 4000);
+        this.currentSession.lastSummarizedTurnIndex = this.currentSession.turns.length;
+        HistoryManager.saveSession(this.currentSession);
+        logger.success('Resumen de memoria generado y guardado.');
+        return this.currentSession.summary;
+      } catch (err) {
+        TUI.stopThinking();
+        logger.warn(`No se pudo generar el resumen automático con LLM: ${err}`);
+      }
     }
+
+    // Resumen local instantáneo y confiable (sin llamadas web durante shutdown)
+    const summaryLines = newTurns.map((t) => {
+      const p = t.prompt.slice(0, 80);
+      const s = t.summary ? ` → ${t.summary}` : (t.actionType ? ` (${t.actionType})` : '');
+      return `• ${p}${s}`;
+    });
+    const localSummary = summaryLines.join('\n');
+    const previous = this.currentSession.summary;
+    this.currentSession.summary = [previous, localSummary].filter(Boolean).join('\n').slice(0, 4000);
+    this.currentSession.lastSummarizedTurnIndex = this.currentSession.turns.length;
+    HistoryManager.saveSession(this.currentSession);
+    return this.currentSession.summary;
   }
 
   /**
@@ -734,9 +748,9 @@ export class Orchestrator {
       }
       HistoryManager.saveSession(this.currentSession);
 
-      // Memoria a largo plazo: resumir automáticamente los turnos nuevos antes de cerrar
-      if (this.autoSummarize && this.isInitialized && this.currentSession.turns.length > 0) {
-        await this.summarizeSessionInternal();
+      // Memoria a largo plazo: resumir localmente sin bloquear el cierre del proceso
+      if (this.autoSummarize && this.currentSession.turns.length > 0) {
+        await this.summarizeSessionInternal(false);
       }
 
       await this.leaderDriver.close();
