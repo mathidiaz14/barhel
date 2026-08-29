@@ -38,7 +38,15 @@ const AVAILABLE_SLASH_COMMANDS = [
 
 export async function startInteractiveChat(options: CLIOptions = {}): Promise<void> {
   let targetSessionId = options.sessionId;
-  if (options.resume && !targetSessionId) {
+  if (targetSessionId) {
+    const existing = HistoryManager.getSession(targetSessionId);
+    if (existing) {
+      targetSessionId = existing.id;
+    } else {
+      logger.warn(`No se encontró la sesión "${targetSessionId}". Se iniciará una nueva sesión.`);
+      targetSessionId = undefined;
+    }
+  } else if (options.resume) {
     const selected = await HistoryManager.promptSelectSession(options.workdir || process.cwd());
     if (selected) {
       targetSessionId = selected.id;
@@ -56,6 +64,13 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
 
   const orchestrator = new Orchestrator(mergedOptions);
   const workdir = orchestrator.getWorkdir();
+
+  const printExitMessage = () => {
+    const sess = orchestrator.getSession();
+    console.log(`\n${pc.bold('Sesión guardada:')} ${pc.cyan(sess.title)} ${pc.dim(`(#${sess.id})`)}`);
+    console.log(`Para reanudar esta sesión, ejecuta:`);
+    console.log(`  ${pc.bold(pc.green(`barhel -s ${sess.id}`))}\n`);
+  };
 
   const printCurrentBanner = () => {
     const leaderMeta = DriverFactory.getMeta(orchestrator.getLeaderId());
@@ -324,6 +339,7 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
       case '/quit':
         console.log(pc.cyan('\nCerrando Barhel y guardando sesion...'));
         await orchestrator.shutdown();
+        printExitMessage();
         rl.close();
         process.exit(0);
 
@@ -447,12 +463,14 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
     } else {
       console.log(pc.cyan('\nCerrando Barhel y guardando sesion...'));
       await orchestrator.shutdown();
+      printExitMessage();
       process.exit(0);
     }
   });
 
   rl.on('close', async () => {
     await orchestrator.shutdown();
+    printExitMessage();
     process.exit(0);
   });
 }

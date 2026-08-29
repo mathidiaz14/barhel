@@ -99,7 +99,7 @@ export class HistoryManager {
    */
   public static getSession(id: string): ChatSession | null {
     this.ensureDir();
-    const cleanId = id.replace(/\.json(\.enc)?$/, '').trim();
+    const cleanId = id.replace(/^#/, '').replace(/\.json(\.enc)?$/, '').trim().toLowerCase();
 
     const fileCandidates = [
       path.join(SESSIONS_HISTORY_DIR, `${cleanId}.json.enc`),
@@ -120,6 +120,14 @@ export class HistoryManager {
         // Probar siguiente candidato
       }
     }
+
+    // Si no coincide exactamente, buscar si coincide con el prefijo del ID de alguna sesión
+    const all = this.listSessions();
+    const prefixMatch = all.find((s) => s.id.toLowerCase().startsWith(cleanId));
+    if (prefixMatch) {
+      return prefixMatch;
+    }
+
     return null;
   }
 

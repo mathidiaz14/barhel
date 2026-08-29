@@ -90,7 +90,11 @@ program
         logger.warn('Modo PLAN ONLY activado: no se aplicarán cambios reales.');
       }
       await orchestrator.runTurn(prompt);
+      const sess = orchestrator.getSession();
       await orchestrator.shutdown();
+      console.log(`\n${pc.bold('Sesión guardada:')} ${pc.cyan(sess.title)} ${pc.dim(`(#${sess.id})`)}`);
+      console.log(`Para reanudar esta sesión, ejecuta:`);
+      console.log(`  ${pc.bold(pc.green(`barhel -s ${sess.id}`))}\n`);
       if (options.notify) {
         process.stdout.write('\x07');
       }
