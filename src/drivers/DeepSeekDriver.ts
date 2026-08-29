@@ -28,10 +28,12 @@ export const DEEPSEEK_CONFIG: ProviderConfig = {
       'button[aria-label*="Send"]',
       'button[aria-label*="Enviar"]',
       'div[class*="send-button"]',
+      'div[class*="send-btn"]',
       'div.ds-icon-button:has(svg)',
+      'div.ds-icon-button',
       'div[role="button"]:has(svg)',
       'button[type="submit"]',
-      '.ds-icon-button',
+      'button:has(svg)',
     ],
     stopButton: [
       'div[role="button"][aria-label*="Stop"]',
@@ -40,14 +42,16 @@ export const DEEPSEEK_CONFIG: ProviderConfig = {
       'div[class*="stop"]',
       '.ds-loading-icon',
       'svg.ds-stop-icon',
+      'div.ds-icon-button:has(rect)',
+      'button:has(rect)',
       'button:has(svg.ds-stop-icon)',
       'div:has(svg.ds-stop-icon)',
     ],
     responseContainer: [
       '.ds-markdown',
+      '.ds-markdown-html',
       'div[class*="ds-markdown"]',
-      'div.ds-markdown-html',
-      'div[class*="ds-message-item"]',
+      'div.ds-message-item:not(:has(.ds-message-user))',
       'div.ds-message-item',
       'div.chat-message:not(.chat-message-user)',
       'div[class*="message-assistant"]',
@@ -99,6 +103,9 @@ export class DeepSeekDriver extends BaseDriver {
     const inputLocator = this.page.locator(inputSelector).first();
     await inputLocator.click();
 
+    // Contar bloques de respuesta previos antes de enviar el nuevo turno
+    const previousTurnCount = await this.countResponses();
+
     // Rellenar prompt de forma nativa e invocar setter de React
     try {
       await inputLocator.fill(prompt);
@@ -130,7 +137,6 @@ export class DeepSeekDriver extends BaseDriver {
     await this.page.waitForTimeout(300);
 
     // 2. Disparar envío: click en el botón de enviar, con Enter como fallback
-    //    (evita un doble envío al combinar Enter + click).
     await inputLocator.focus();
     await this.page.waitForTimeout(200);
 
@@ -152,8 +158,8 @@ export class DeepSeekDriver extends BaseDriver {
       await inputLocator.press('Enter');
     }
 
-    // 3. Esperar generación y streaming
-    await this.waitForCompletion();
+    // 3. Esperar generación y streaming del NUEVO turno
+    await this.waitForCompletion(previousTurnCount);
 
     // 4. Extraer el texto de la última respuesta
     const responseText = await this.extractLatestResponse();
@@ -164,7 +170,19 @@ export class DeepSeekDriver extends BaseDriver {
     return responseText;
   }
 
-  private async waitForCompletion(): Promise<void> {
+  private async countResponses(): Promise<number> {
+    if (!this.page) return 0;
+    try {
+      return await this.page.evaluate(() => {
+        const sel = '.ds-markdown, .ds-markdown-html, div[class*="ds-markdown"], div.ds-message-item:not(:has(.ds-message-user))';
+        return document.querySelectorAll(sel).length;
+      });
+    } catch {
+      return 0;
+    }
+  }
+
+  private async waitForCompletion(previousCount = 0): Promise<void> {
     if (!this.page) return;
 
     const startTime = Date.now();
@@ -174,13 +192,15 @@ export class DeepSeekDriver extends BaseDriver {
     let hasStarted = false;
 
     // Esperar mínimo inicial para que la red procese el envío
-    await this.page.waitForTimeout(2000);
+    await this.page.waitForTimeout(1500);
 
     while (Date.now() - startTime < maxTimeout) {
       const streaming = await this.isStreaming();
+      const currentCount = await this.countResponses();
       const currentContent = (await this.extractLatestResponse()).trim();
 
-      if (streaming || currentContent.length > 0) {
+      // Detectar si el nuevo turno ha comenzado a generarse
+      if (streaming || currentCount > previousCount || (currentContent.length > 0 && currentContent !== lastContent && hasStarted)) {
         hasStarted = true;
       }
 
@@ -188,8 +208,8 @@ export class DeepSeekDriver extends BaseDriver {
         if (!streaming) {
           if (currentContent.length > 0 && currentContent === lastContent) {
             stableCount++;
-            if (stableCount >= 2) {
-              // Estabilizado
+            if (stableCount >= 3) {
+              // Estabilizado (3 ticks de 600ms = 1.8s sin cambios y sin botón de stop)
               break;
             }
           } else {
@@ -201,7 +221,7 @@ export class DeepSeekDriver extends BaseDriver {
       }
 
       lastContent = currentContent;
-      await this.page.waitForTimeout(800);
+      await this.page.waitForTimeout(600);
     }
   }
 
@@ -210,7 +230,7 @@ export class DeepSeekDriver extends BaseDriver {
 
     try {
       const text = await this.page.evaluate(() => {
-        // 1. Probar selectores conocidos de DeepSeek
+        // 1. Probar selectores de bloques de respuesta de DeepSeek
         const candidateSelectors = [
           '.ds-markdown',
           '.ds-markdown-html',
@@ -227,12 +247,18 @@ export class DeepSeekDriver extends BaseDriver {
           const els = Array.from(document.querySelectorAll(sel));
           if (els.length > 0) {
             const last = els[els.length - 1] as HTMLElement;
-            const t = last.innerText?.trim() || last.textContent?.trim() || '';
+            // Clonar para no alterar el DOM original
+            const clone = last.cloneNode(true) as HTMLElement;
+            
+            // Eliminar botones de feedback, copiar, etc.
+            clone.querySelectorAll('button, svg, [class*="action"], [class*="button"]').forEach((n) => n.remove());
+
+            const t = clone.innerText?.trim() || clone.textContent?.trim() || '';
             if (t.length > 0) return t;
           }
         }
 
-        // 2. Fallback: buscar los turnos de conversación y tomar el último
+        // 2. Fallback: buscar los turnos de conversación y tomar el último del asistente
         const allMessages = Array.from(
           document.querySelectorAll('div[class*="message"], div[class*="chat"], article')
         );
@@ -242,7 +268,9 @@ export class DeepSeekDriver extends BaseDriver {
           if (typeof cls === 'string' && (cls.includes('user') || cls.includes('input') || cls.includes('prompt'))) {
             continue;
           }
-          const t = el.innerText?.trim() || '';
+          const clone = el.cloneNode(true) as HTMLElement;
+          clone.querySelectorAll('button, svg').forEach((n) => n.remove());
+          const t = clone.innerText?.trim() || '';
           if (t.length > 5 && !t.startsWith('barhel') && !t.includes('ERES BARHEL')) {
             return t;
           }
