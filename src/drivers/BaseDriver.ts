@@ -3,6 +3,15 @@ import { ProviderConfig, ProviderType } from '../types/providers.js';
 import { getProviderSessionPath } from '../utils/session.js';
 import { logger } from '../utils/logger.js';
 
+export class WebProviderError extends Error {
+  public readonly reason: string;
+  constructor(message: string, reason: string) {
+    super(message);
+    this.name = 'WebProviderError';
+    this.reason = reason;
+  }
+}
+
 export abstract class BaseDriver {
   protected config: ProviderConfig;
   protected context: BrowserContext | null = null;
@@ -38,7 +47,7 @@ export abstract class BaseDriver {
   }
 
   /**
-   * Inicializa el contexto de navegador persistente con técnicas anti-detección
+   * Inicializa el contexto de navegador persistente con técnicas anti-detección avanzadas
    */
   public async init(headless = true, initialChatUrl?: string): Promise<void> {
     if (initialChatUrl) {
@@ -59,6 +68,9 @@ export abstract class BaseDriver {
     const launchArgs = [
       '--window-position=0,0',
       '--lang=es-ES,es,en-US,en',
+      '--disable-blink-features=AutomationControlled',
+      '--disable-features=IsolateOrigins,site-per-process',
+      '--disable-infobars',
     ];
 
     try {
@@ -75,7 +87,7 @@ export abstract class BaseDriver {
         timezoneId: 'America/Argentina/Buenos_Aires',
       };
 
-      // Intentar primero con Google Chrome del sistema o Edge para máxima legitimidad ante Google
+      // Intentar primero con Google Chrome del sistema o Edge para máxima legitimidad
       try {
         this.context = await chromium.launchPersistentContext(sessionDir, {
           ...launchOptions,
@@ -111,7 +123,7 @@ export abstract class BaseDriver {
 
         // Simular idiomas reales
         Object.defineProperty(navigator, 'languages', {
-          get: () => ['en-US', 'en', 'es'],
+          get: () => ['es-ES', 'es', 'en-US', 'en'],
         });
 
         // Override de permissions query
@@ -201,6 +213,139 @@ export abstract class BaseDriver {
   }
 
   /**
+   * Inyecta de forma universal y ultra-rápida prompts de cualquier longitud
+   * compatible con editores ricos (Lexical, ProseMirror, React, Draft.js, Svelte).
+   */
+  public async injectPrompt(inputSelector: string, prompt: string): Promise<void> {
+    if (!this.page) throw new Error('Página no inicializada');
+
+    const locator = this.page.locator(inputSelector).first();
+    await locator.click({ force: true, timeout: 1500 }).catch(() => locator.focus().catch(() => {}));
+
+    // 1. Probar inyección vía DataTransfer / ClipboardEvent simulado
+    const injectedViaClipboard = await this.page.evaluate(
+      ({ sel, text }) => {
+        const el = document.querySelector(sel) as HTMLElement;
+        if (!el) return false;
+        el.focus();
+
+        try {
+          const dt = new DataTransfer();
+          dt.setData('text/plain', text);
+          const pasteEvent = new ClipboardEvent('paste', {
+            clipboardData: dt,
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+          });
+          const notPrevented = el.dispatchEvent(pasteEvent);
+          if (!notPrevented || el.innerText?.trim() || (el as HTMLTextAreaElement).value?.trim()) {
+            return true;
+          }
+        } catch {
+          // Fallback evaluate
+        }
+        return false;
+      },
+      { sel: inputSelector, text: prompt }
+    );
+
+    // 2. Si el editor requiere react descriptor setter
+    if (!injectedViaClipboard) {
+      await this.page.evaluate(
+        ({ sel, text }) => {
+          const el = document.querySelector(sel) as HTMLTextAreaElement | HTMLElement;
+          if (!el) return;
+          el.focus();
+
+          if ('value' in el) {
+            const proto = Object.getPrototypeOf(el);
+            const setter =
+              Object.getOwnPropertyDescriptor(proto, 'value')?.set ||
+              Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+            if (setter) {
+              setter.call(el, text);
+            } else {
+              (el as HTMLTextAreaElement).value = text;
+            }
+          } else {
+            el.innerHTML = `<p>${text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</p>`;
+          }
+
+          el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+          el.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true, data: text }));
+        },
+        { sel: inputSelector, text: prompt }
+      );
+    }
+
+    await this.page.waitForTimeout(250);
+  }
+
+  /**
+   * Detecta tempranamente errores de la web (Rate Limits, Cloudflare, saturación)
+   */
+  public async detectWebErrors(): Promise<string | null> {
+    if (!this.page) return null;
+    try {
+      return await this.page.evaluate(() => {
+        const bodyText = document.body?.innerText?.toLowerCase() || '';
+        const errorPatterns = [
+          { pattern: 'too many requests', reason: 'Rate limit (too many requests)' },
+          { pattern: 'rate limit', reason: 'Rate limit alcanzado' },
+          { pattern: 'you have reached your limit', reason: 'Límite de mensajes alcanzado' },
+          { pattern: 'capacidad agotada', reason: 'Servidor sobrecargado' },
+          { pattern: 'high traffic', reason: 'Servidor ocupado por alto tráfico' },
+          { pattern: 'unusual traffic', reason: 'Cloudflare / Detección de tráfico inusual' },
+          { pattern: 'verify you are human', reason: 'Captcha / Cloudflare Turnstile' },
+          { pattern: 'just a moment...', reason: 'Cloudflare Challenge' },
+          { pattern: 'checking your browser', reason: 'Cloudflare Protection' },
+          { pattern: 'access denied', reason: 'Acceso denegado / Bloqueo web' },
+        ];
+        for (const p of errorPatterns) {
+          if (bodyText.includes(p.pattern)) {
+            return p.reason;
+          }
+        }
+        return null;
+      });
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Auto-healing: Encuentra semánticamente el campo de entrada si los selectores cambiaron
+   */
+  public async findSemanticInput(): Promise<string | null> {
+    if (!this.page) return null;
+    return await this.page.evaluate(() => {
+      const candidates = Array.from(
+        document.querySelectorAll('textarea, [contenteditable="true"], div[role="textbox"]')
+      ) as HTMLElement[];
+      let best: HTMLElement | null = null;
+      let maxArea = 0;
+      for (const el of candidates) {
+        const rect = el.getBoundingClientRect();
+        if (rect.width > 100 && rect.height > 20 && rect.top < window.innerHeight) {
+          const area = rect.width * rect.height;
+          if (area > maxArea) {
+            maxArea = area;
+            best = el;
+          }
+        }
+      }
+      if (best) {
+        if (best.id) return `#${best.id}`;
+        if (best.tagName.toLowerCase() === 'textarea') return 'textarea';
+        return '[contenteditable="true"]';
+      }
+      return null;
+    });
+  }
+
+  /**
    * Cierra automáticamente popups, banners o modales que bloqueen la interfaz
    */
   public async dismissModals(): Promise<void> {
@@ -225,7 +370,6 @@ export abstract class BaseDriver {
             btn.click();
           }
         }
-        // Remover wrappers de focus-lock si bloquean los eventos de ratón
         document.querySelectorAll('.ds-modal-focus-lock, .ds-modal-wrapper').forEach((el) => {
           if (!el.querySelector('form, textarea, input[type="password"]')) {
             el.remove();
@@ -284,9 +428,9 @@ export abstract class BaseDriver {
   }
 
   /**
-   * Método abstracto para enviar prompt y esperar la respuesta completa del LLM
+   * Método abstracto para enviar prompt y esperar la respuesta completa del LLM con soporte de streaming opcional
    */
-  public abstract sendMessage(prompt: string): Promise<string>;
+  public abstract sendMessage(prompt: string, onChunk?: (chunk: string) => void): Promise<string>;
 
   /**
    * Método abstracto para verificar si la respuesta sigue en proceso (streaming)
@@ -310,8 +454,8 @@ export abstract class BaseDriver {
   }
 
   /**
- * Helper seguro para encontrar un elemento entre una lista de selectores alternativos con reintentos
- */
+   * Helper seguro para encontrar un elemento entre una lista de selectores alternativos con auto-healing
+   */
   protected async findFirstVisibleSelector(selectors: string[], timeoutMs = 8000): Promise<string | null> {
     if (!this.page) return null;
     const start = Date.now();
@@ -319,21 +463,25 @@ export abstract class BaseDriver {
       for (const sel of selectors) {
         try {
           const el = this.page.locator(sel).first();
-          if (await el.isVisible({ timeout: 600 })) {
+          if (await el.isVisible({ timeout: 400 })) {
             return sel;
           }
         } catch {
           // Probar siguiente selector
         }
       }
-      await this.page.waitForTimeout(400);
+      await this.page.waitForTimeout(300);
     }
+
+    // Auto-healing fallback
+    const semantic = await this.findSemanticInput();
+    if (semantic) return semantic;
+
     return null;
   }
 
   /**
    * Verifica que los selectores clave del proveedor sigan presentes en la página.
-   * Usado por el subcomando "barhel doctor" para detectar cambios de UI.
    */
   public async verifyUI(): Promise<{ name: string; found: boolean; selector?: string }[]> {
     if (!this.page) return [];

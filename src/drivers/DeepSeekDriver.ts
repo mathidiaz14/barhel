@@ -1,4 +1,4 @@
-import { BaseDriver } from './BaseDriver.js';
+import { BaseDriver, WebProviderError } from './BaseDriver.js';
 import { ProviderConfig, ProviderType } from '../types/providers.js';
 
 export const DEEPSEEK_CONFIG: ProviderConfig = {
@@ -87,12 +87,12 @@ export class DeepSeekDriver extends BaseDriver {
     return false;
   }
 
-  public async sendMessage(prompt: string): Promise<string> {
+  public async sendMessage(prompt: string, onChunk?: (chunk: string) => void): Promise<string> {
     if (!this.page) throw new Error('Driver DeepSeek no está inicializado.');
 
     await this.ensureChatPage();
 
-    // 1. Localizar input con polling de hasta 10s para SPA hydration
+    // 1. Localizar input con polling y auto-healing
     const inputSelector = await this.findFirstVisibleSelector(this.config.selectors.inputPrompt, 10000);
     if (!inputSelector) {
       throw new Error(
@@ -102,41 +102,13 @@ export class DeepSeekDriver extends BaseDriver {
 
     await this.dismissModals();
 
-    const inputLocator = this.page.locator(inputSelector).first();
-    await inputLocator.click({ force: true, timeout: 1500 }).catch(() => inputLocator.focus().catch(() => {}));
-
     // Contar bloques de respuesta previos antes de enviar el nuevo turno
     const previousTurnCount = await this.countResponses();
 
-    // 2. Rellenar prompt e invocar setter nativo de React
-    try {
-      await inputLocator.fill(prompt);
-    } catch {
-      // Fallback evaluate
-    }
+    // 2. Inyección universal y ultra-fiable del prompt (Clipboard/DataTransfer + fallback)
+    await this.injectPrompt(inputSelector, prompt);
 
-    await this.page.evaluate(
-      ({ sel, text }) => {
-        const el = document.querySelector(sel) as HTMLTextAreaElement;
-        if (el) {
-          el.focus();
-          const proto = Object.getPrototypeOf(el);
-          const setter =
-            Object.getOwnPropertyDescriptor(proto, 'value')?.set ||
-            Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
-          if (setter) {
-            setter.call(el, text);
-          } else {
-            el.value = text;
-          }
-          el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-          el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-        }
-      },
-      { sel: inputSelector, text: prompt }
-    );
-
-    await this.page.waitForTimeout(300);
+    const inputLocator = this.page.locator(inputSelector).first();
 
     // 3. Disparar el envío:
     // A) Clic vía JS en el botón de envío
@@ -162,8 +134,8 @@ export class DeepSeekDriver extends BaseDriver {
     for (const sel of this.config.selectors.sendButton) {
       try {
         const sendBtn = this.page.locator(sel).first();
-        if (await sendBtn.isVisible({ timeout: 300 })) {
-          await sendBtn.click({ timeout: 500, force: true });
+        if (await sendBtn.isVisible({ timeout: 200 })) {
+          await sendBtn.click({ timeout: 400, force: true });
           break;
         }
       } catch {
@@ -176,12 +148,16 @@ export class DeepSeekDriver extends BaseDriver {
     await inputLocator.press('Enter').catch(() => {});
     await inputLocator.press('Control+Enter').catch(() => {});
 
-    // 4. Esperar generación y streaming del NUEVO turno
-    await this.waitForCompletion(previousTurnCount);
+    // 4. Esperar generación y streaming del NUEVO turno con detección de errores web en vivo
+    await this.waitForCompletion(previousTurnCount, onChunk);
 
     // 5. Extraer el texto de la última respuesta
     const responseText = await this.extractLatestResponse();
     if (!responseText) {
+      const webErr = await this.detectWebErrors();
+      if (webErr) {
+        throw new WebProviderError(`DeepSeek reportó: ${webErr}`, webErr);
+      }
       throw new Error('No se pudo extraer la respuesta de DeepSeek.');
     }
 
@@ -200,22 +176,36 @@ export class DeepSeekDriver extends BaseDriver {
     }
   }
 
-  private async waitForCompletion(previousCount = 0): Promise<void> {
+  private async waitForCompletion(previousCount = 0, onChunk?: (chunk: string) => void): Promise<void> {
     if (!this.page) return;
 
     const startTime = Date.now();
     const maxTimeout = this.config.defaultTimeoutMs;
     let stableCount = 0;
     let lastContent = '';
+    let lastStreamLength = 0;
     let hasStarted = false;
 
     // Esperar mínimo inicial para que la red procese el envío
-    await this.page.waitForTimeout(1500);
+    await this.page.waitForTimeout(1000);
 
     while (Date.now() - startTime < maxTimeout) {
+      // Detección temprana de errores web (Cloudflare / Rate Limit) sin esperar 5 minutos
+      const webError = await this.detectWebErrors();
+      if (webError) {
+        throw new WebProviderError(`Fallo en DeepSeek: ${webError}`, webError);
+      }
+
       const streaming = await this.isStreaming();
       const currentCount = await this.countResponses();
       const currentContent = (await this.extractLatestResponse()).trim();
+
+      // Transmitir chunks de streaming en vivo si onChunk está suscrito
+      if (onChunk && currentContent.length > lastStreamLength) {
+        const delta = currentContent.slice(lastStreamLength);
+        onChunk(delta);
+        lastStreamLength = currentContent.length;
+      }
 
       // Detectar si el nuevo turno ha comenzado a generarse
       if (streaming || currentCount > previousCount || (currentContent.length > 0 && currentContent !== lastContent && hasStarted)) {
@@ -227,7 +217,7 @@ export class DeepSeekDriver extends BaseDriver {
           if (currentContent.length > 0 && currentContent === lastContent) {
             stableCount++;
             if (stableCount >= 3) {
-              // Estabilizado (3 ticks de 600ms = 1.8s sin cambios y sin botón de stop)
+              // Estabilizado (3 ticks de 500ms = 1.5s sin cambios y sin botón de stop)
               break;
             }
           } else {
@@ -239,7 +229,7 @@ export class DeepSeekDriver extends BaseDriver {
       }
 
       lastContent = currentContent;
-      await this.page.waitForTimeout(600);
+      await this.page.waitForTimeout(500);
     }
   }
 
@@ -265,10 +255,7 @@ export class DeepSeekDriver extends BaseDriver {
           const els = Array.from(document.querySelectorAll(sel));
           if (els.length > 0) {
             const last = els[els.length - 1] as HTMLElement;
-            // Clonar para no alterar el DOM original
             const clone = last.cloneNode(true) as HTMLElement;
-            
-            // Eliminar botones de feedback, copiar, etc.
             clone.querySelectorAll('button, svg, [class*="action"], [class*="button"]').forEach((n) => n.remove());
 
             const t = clone.innerText?.trim() || clone.textContent?.trim() || '';

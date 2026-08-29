@@ -1,4 +1,4 @@
-import { BaseDriver } from './BaseDriver.js';
+import { BaseDriver, WebProviderError } from './BaseDriver.js';
 import { ProviderConfig, ProviderType } from '../types/providers.js';
 
 export const CHATGPT_CONFIG: ProviderConfig = {
@@ -21,6 +21,7 @@ export const CHATGPT_CONFIG: ProviderConfig = {
       'button[aria-label*="Send prompt"]',
       'button[aria-label*="Send message"]',
       'button:has(svg[viewBox="0 0 24 24"])',
+      'button:has(svg)',
     ],
     stopButton: [
       'button[data-testid="stop-button"]',
@@ -51,7 +52,7 @@ export class ChatGPTDriver extends BaseDriver {
     for (const stopSel of this.config.selectors.stopButton) {
       try {
         const stopEl = this.page.locator(stopSel).first();
-        if (await stopEl.isVisible({ timeout: 400 })) {
+        if (await stopEl.isVisible({ timeout: 300 })) {
           return true;
         }
       } catch {
@@ -61,50 +62,31 @@ export class ChatGPTDriver extends BaseDriver {
     return false;
   }
 
-  public async sendMessage(prompt: string): Promise<string> {
+  public async sendMessage(prompt: string, onChunk?: (chunk: string) => void): Promise<string> {
     if (!this.page) throw new Error('Driver ChatGPT no está inicializado.');
 
     await this.ensureChatPage();
 
-    const inputSelector = await this.findFirstVisibleSelector(this.config.selectors.inputPrompt);
+    const inputSelector = await this.findFirstVisibleSelector(this.config.selectors.inputPrompt, 10000);
     if (!inputSelector) {
-      throw new Error('No se encontró el campo de entrada de ChatGPT. Inicia sesión con: dev-agent login chatgpt');
+      throw new Error('No se encontró el campo de entrada de ChatGPT. Inicia sesión con: barhel login chatgpt');
     }
 
-    const inputLocator = this.page.locator(inputSelector).first();
-    await inputLocator.click();
+    await this.dismissModals();
 
-    // ChatGPT usa un contenteditable de ProseMirror
-    await this.page.evaluate(
-      ({ selector, text }) => {
-        const el = document.querySelector(selector) as HTMLElement;
-        if (el) {
-          el.focus();
-          if (el.tagName.toLowerCase() === 'textarea') {
-            (el as HTMLTextAreaElement).value = text;
-          } else {
-            // ProseMirror contenteditable
-            el.innerHTML = `<p>${text.replace(/\n/g, '<br>')}</p>`;
-          }
-          el.dispatchEvent(new Event('input', { bubbles: true }));
-          el.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-      },
-      { selector: inputSelector, text: prompt }
-    );
+    // 1. Inyectar prompt con soporte para ProseMirror y ContentEditable de ChatGPT
+    await this.injectPrompt(inputSelector, prompt);
 
     await this.page.waitForTimeout(300);
-    await inputLocator.press('Space');
-    await inputLocator.press('Backspace');
-    await this.page.waitForTimeout(200);
 
+    // 2. Disparar envío
     let sent = false;
-    const sendSelector = await this.findFirstVisibleSelector(this.config.selectors.sendButton);
+    const sendSelector = await this.findFirstVisibleSelector(this.config.selectors.sendButton, 1500);
     if (sendSelector) {
       try {
         const sendBtn = this.page.locator(sendSelector).first();
-        if (await sendBtn.isEnabled({ timeout: 1000 })) {
-          await sendBtn.click();
+        if (await sendBtn.isVisible({ timeout: 400 })) {
+          await sendBtn.click({ force: true, timeout: 800 });
           sent = true;
         }
       } catch {
@@ -113,31 +95,49 @@ export class ChatGPTDriver extends BaseDriver {
     }
 
     if (!sent) {
-      await inputLocator.press('Enter');
+      const inputLocator = this.page.locator(inputSelector).first();
+      await inputLocator.focus().catch(() => {});
+      await inputLocator.press('Enter').catch(() => {});
     }
 
-    await this.page.waitForTimeout(2500);
-    await this.waitForCompletion();
+    await this.page.waitForTimeout(1500);
+    await this.waitForCompletion(onChunk);
 
     const responseText = await this.extractLatestResponse();
     if (!responseText) {
+      const webErr = await this.detectWebErrors();
+      if (webErr) {
+        throw new WebProviderError(`ChatGPT error: ${webErr}`, webErr);
+      }
       throw new Error('No se pudo extraer la respuesta de ChatGPT.');
     }
 
     return responseText;
   }
 
-  private async waitForCompletion(): Promise<void> {
+  private async waitForCompletion(onChunk?: (chunk: string) => void): Promise<void> {
     if (!this.page) return;
 
     const startTime = Date.now();
     const maxTimeout = this.config.defaultTimeoutMs;
     let stableCount = 0;
     let lastContent = '';
+    let lastStreamLength = 0;
 
     while (Date.now() - startTime < maxTimeout) {
+      const webErr = await this.detectWebErrors();
+      if (webErr) {
+        throw new WebProviderError(`ChatGPT reportó: ${webErr}`, webErr);
+      }
+
       const streaming = await this.isStreaming();
       const currentContent = (await this.extractLatestResponse()).trim();
+
+      if (onChunk && currentContent.length > lastStreamLength) {
+        const delta = currentContent.slice(lastStreamLength);
+        onChunk(delta);
+        lastStreamLength = currentContent.length;
+      }
 
       if (!streaming) {
         if (currentContent.length > 0 && currentContent === lastContent) {
@@ -153,28 +153,38 @@ export class ChatGPTDriver extends BaseDriver {
       }
 
       lastContent = currentContent;
-      await this.page.waitForTimeout(1000);
+      await this.page.waitForTimeout(500);
     }
   }
 
   private async extractLatestResponse(): Promise<string> {
     if (!this.page) return '';
 
-    for (const sel of this.config.selectors.responseContainer) {
-      try {
-        const count = await this.page.locator(sel).count();
-        if (count > 0) {
-          const lastEl = this.page.locator(sel).nth(count - 1);
-          const text = await lastEl.innerText();
-          if (text && text.trim().length > 0) {
-            return text.trim();
+    try {
+      const text = await this.page.evaluate(() => {
+        const candidateSelectors = [
+          '[data-message-author-role="assistant"] .markdown',
+          '[data-message-author-role="assistant"]',
+          'article[data-testid^="conversation-turn"] .markdown',
+          'div.markdown',
+        ];
+
+        for (const sel of candidateSelectors) {
+          const els = Array.from(document.querySelectorAll(sel));
+          if (els.length > 0) {
+            const last = els[els.length - 1] as HTMLElement;
+            const clone = last.cloneNode(true) as HTMLElement;
+            clone.querySelectorAll('button, svg, [class*="action"], [class*="button"]').forEach((n) => n.remove());
+            const t = clone.innerText?.trim() || clone.textContent?.trim() || '';
+            if (t.length > 0) return t;
           }
         }
-      } catch {
-        // Probar siguiente
-      }
-    }
+        return '';
+      });
 
-    return '';
+      return text ? text.trim() : '';
+    } catch {
+      return '';
+    }
   }
 }

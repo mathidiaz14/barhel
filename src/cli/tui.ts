@@ -39,6 +39,16 @@ export class TUI {
   }
 
   /**
+   * Actualiza el progreso de streaming en vivo con el número de caracteres recibidos
+   */
+  public static updateThinkingChunk(charCount: number, modelName = 'Líder'): void {
+    if (isSpinnerActive() && this.thinkingStartTime > 0) {
+      const elapsedSec = ((Date.now() - this.thinkingStartTime) / 1000).toFixed(1);
+      updateSpinnerText(`${pc.yellow('✻')} ${pc.dim(`${modelName} generando`)} ${pc.yellow(`(${elapsedSec}s • ${charCount} chars)`)}`);
+    }
+  }
+
+  /**
    * Detiene el spinner de pensamiento y retorna el tiempo transcurrido en ms
    */
   public static stopThinking(): number {

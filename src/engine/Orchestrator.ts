@@ -387,7 +387,12 @@ export class Orchestrator {
 
         let responseRaw: string;
         try {
-          responseRaw = await this.leaderDriver.sendMessage(nextPrompt);
+          let streamedChars = 0;
+          const onStreamChunk = (chunk: string) => {
+            streamedChars += chunk.length;
+            TUI.updateThinkingChunk(streamedChars, leaderName);
+          };
+          responseRaw = await this.leaderDriver.sendMessage(nextPrompt, onStreamChunk);
           this.sendFailures = 0;
         } catch (err) {
           TUI.stopThinking();
@@ -395,25 +400,25 @@ export class Orchestrator {
             break;
           }
           this.sendFailures++;
-        logger.error(`Error de comunicación con ${this.leaderDriver.displayName}`, err);
+          logger.error(`Error de comunicación con ${this.leaderDriver.displayName}`, err);
 
-        const fallback = this.getNextFallback();
-        if (fallback) {
-          logger.warn(`Proveedor primario falló (${this.sendFailures}x) → usando respaldo [${fallback}]`);
-          await this.applyFallbackLeader(fallback);
-          if (!this.isInitialized) {
-            try {
-              await this.initSession();
-            } catch (initErr) {
-              logger.error('Fallo al inicializar el líder de respaldo', initErr);
-              break;
+          const fallback = this.getNextFallback();
+          if (fallback) {
+            logger.warn(`Proveedor primario falló (${this.sendFailures}x) → activando respaldo inmediato [${fallback}]`);
+            await this.applyFallbackLeader(fallback);
+            if (!this.isInitialized) {
+              try {
+                await this.initSession();
+              } catch (initErr) {
+                logger.error('Fallo al inicializar el líder de respaldo', initErr);
+                break;
+              }
             }
+            iteratorState.fallbackRetries++;
+            continue;
           }
-          iteratorState.fallbackRetries++;
-          continue;
+          break;
         }
-        break;
-      }
 
       const thinkDurationMs = Math.round(performance.now() - thinkStart);
       TUI.stopThinking();

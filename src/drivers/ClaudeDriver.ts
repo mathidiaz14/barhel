@@ -1,4 +1,4 @@
-import { BaseDriver } from './BaseDriver.js';
+import { BaseDriver, WebProviderError } from './BaseDriver.js';
 import { ProviderConfig, ProviderType } from '../types/providers.js';
 
 export const CLAUDE_CONFIG: ProviderConfig = {
@@ -54,7 +54,7 @@ export class ClaudeDriver extends BaseDriver {
     for (const stopSel of this.config.selectors.stopButton) {
       try {
         const stopEl = this.page.locator(stopSel).first();
-        if (await stopEl.isVisible({ timeout: 400 })) {
+        if (await stopEl.isVisible({ timeout: 300 })) {
           return true;
         }
       } catch {
@@ -64,81 +64,96 @@ export class ClaudeDriver extends BaseDriver {
     return false;
   }
 
-  public async sendMessage(prompt: string): Promise<string> {
+  public async sendMessage(prompt: string, onChunk?: (chunk: string) => void): Promise<string> {
     if (!this.page) throw new Error('Driver Claude no está inicializado.');
 
     await this.ensureChatPage();
 
-    const inputSelector = await this.findFirstVisibleSelector(this.config.selectors.inputPrompt);
+    const inputSelector = await this.findFirstVisibleSelector(this.config.selectors.inputPrompt, 10000);
     if (!inputSelector) {
       throw new Error(
         'No se encontró el campo de entrada de Claude. Inicia sesión con: barhel login claude'
       );
     }
 
+    await this.dismissModals();
+
     const inputLocator = this.page.locator(inputSelector).first();
-    await inputLocator.click();
 
-    // Contar respuestas previas
-    const previousResponsesCount = await this.page
-      .locator(this.config.selectors.responseContainer[0])
-      .count();
+    // 1. Inyectar prompt con soporte para ProseMirror rico
+    await this.injectPrompt(inputSelector, prompt);
 
-    // Pegar / escribir prompt
-    try {
-      await this.page.evaluate(
-        ({ sel, text }) => {
-          const el = document.querySelector(sel);
-          if (el) {
-            el.innerHTML = `<p>${text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</p>`;
-            el.dispatchEvent(new Event('input', { bubbles: true }));
-          }
-        },
-        { sel: inputSelector, text: prompt }
-      );
-    } catch {
-      await inputLocator.fill(prompt);
-    }
+    await this.page.waitForTimeout(300);
 
-    await this.page.waitForTimeout(400);
-
-    const sendSelector = await this.findFirstVisibleSelector(this.config.selectors.sendButton);
+    // 2. Disparar envío
+    let sent = false;
+    const sendSelector = await this.findFirstVisibleSelector(this.config.selectors.sendButton, 1500);
     if (sendSelector) {
-      const sendBtn = this.page.locator(sendSelector).first();
-      if (await sendBtn.isEnabled({ timeout: 1500 })) {
-        await sendBtn.click();
-      } else {
-        await inputLocator.press('Enter');
+      try {
+        const sendBtn = this.page.locator(sendSelector).first();
+        if (await sendBtn.isVisible({ timeout: 400 })) {
+          await sendBtn.click({ force: true, timeout: 800 });
+          sent = true;
+        }
+      } catch {
+        // Fallback
       }
-    } else {
-      await inputLocator.press('Enter');
     }
 
-    await this.page.waitForTimeout(2000);
+    if (!sent) {
+      await inputLocator.focus().catch(() => {});
+      await inputLocator.press('Enter').catch(() => {});
+    }
 
-    // Esperar a que el streaming termine
+    await this.page.waitForTimeout(1500);
+
+    // 3. Esperar a que el streaming termine con streaming deltas
     let streaming = true;
-    let pollInterval = 1000;
     let elapsed = 0;
     const maxWait = this.config.defaultTimeoutMs;
+    let lastStreamLength = 0;
 
     while (streaming && elapsed < maxWait) {
-      await this.page.waitForTimeout(pollInterval);
-      elapsed += pollInterval;
+      const webErr = await this.detectWebErrors();
+      if (webErr) {
+        throw new WebProviderError(`Claude reportó: ${webErr}`, webErr);
+      }
+
+      const responseSel =
+        (await this.findFirstVisibleSelector(this.config.selectors.responseContainer, 800)) ||
+        this.config.selectors.responseContainer[0];
+      const currentResponses = this.page.locator(responseSel);
+      const count = await currentResponses.count();
+
+      if (count > 0 && onChunk) {
+        const lastResponse = currentResponses.nth(count - 1);
+        const text = (await lastResponse.innerText()) || '';
+        if (text.length > lastStreamLength) {
+          const delta = text.slice(lastStreamLength);
+          onChunk(delta);
+          lastStreamLength = text.length;
+        }
+      }
+
+      await this.page.waitForTimeout(500);
+      elapsed += 500;
       streaming = await this.isStreaming();
     }
 
-    // Esperar estabilización del DOM
-    await this.page.waitForTimeout(1500);
+    await this.page.waitForTimeout(1000);
 
     const responseSel =
-      (await this.findFirstVisibleSelector(this.config.selectors.responseContainer)) ||
+      (await this.findFirstVisibleSelector(this.config.selectors.responseContainer, 2000)) ||
       this.config.selectors.responseContainer[0];
 
     const currentResponses = this.page.locator(responseSel);
     const count = await currentResponses.count();
 
     if (count === 0) {
+      const webErr = await this.detectWebErrors();
+      if (webErr) {
+        throw new WebProviderError(`Claude error: ${webErr}`, webErr);
+      }
       throw new Error('Claude no generó ningún bloque de respuesta visible.');
     }
 
