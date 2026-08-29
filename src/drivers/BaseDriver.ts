@@ -21,11 +21,34 @@ export abstract class BaseDriver {
     return this.config.displayName;
   }
 
+  protected currentChatUrl?: string;
+
+  public setChatUrl(url?: string): void {
+    this.currentChatUrl = url;
+  }
+
+  public getChatUrl(): string | undefined {
+    if (this.page) {
+      const url = this.page.url();
+      if (url && !url.startsWith('about:') && url.includes(new URL(this.config.url).hostname)) {
+        this.currentChatUrl = url;
+      }
+    }
+    return this.currentChatUrl;
+  }
+
   /**
    * Inicializa el contexto de navegador persistente con técnicas anti-detección
    */
-  public async init(headless = false): Promise<void> {
+  public async init(headless = true, initialChatUrl?: string): Promise<void> {
+    if (initialChatUrl) {
+      this.currentChatUrl = initialChatUrl;
+    }
+
     if (this.isInitialized && this.context && this.page) {
+      if (this.currentChatUrl) {
+        await this.ensureChatPage(this.currentChatUrl);
+      }
       return;
     }
 
@@ -103,12 +126,13 @@ export abstract class BaseDriver {
       this.page = pages.length > 0 ? pages[0] : await this.context.newPage();
       this.page.setDefaultTimeout(this.config.defaultTimeoutMs);
 
-      // Navegar inmediatamente a la web del proveedor y enfocar
+      // Navegar a la URL de chat específica o al nuevo chat
+      const targetUrl = this.currentChatUrl || this.config.url;
       try {
-        await this.page.goto(this.config.url, { waitUntil: 'domcontentloaded' });
+        await this.page.goto(targetUrl, { waitUntil: 'domcontentloaded' });
         await this.page.bringToFront();
       } catch (navErr) {
-        logger.warn(`No se pudo cargar de inmediato ${this.config.url}: ${navErr}`);
+        logger.warn(`No se pudo cargar de inmediato ${targetUrl}: ${navErr}`);
       }
 
       this.isInitialized = true;
@@ -127,7 +151,7 @@ export abstract class BaseDriver {
 
     if (!this.page) throw new Error('Página no inicializada');
 
-    await this.ensureChatPage();
+    await this.ensureChatPage(this.config.url);
     await this.page.bringToFront();
 
     logger.success(`Navegador abierto en ${this.config.url}`);
@@ -149,18 +173,20 @@ export abstract class BaseDriver {
   }
 
   /**
-   * Navega a la página del chat si aún no está en ella y espera a que esté lista
+   * Navega a la página del chat (o a una URL de chat específica) y espera a que esté lista
    */
-  public async ensureChatPage(): Promise<void> {
+  public async ensureChatPage(targetChatUrl?: string): Promise<void> {
     if (!this.page) throw new Error('Página no inicializada');
 
+    const destUrl = targetChatUrl || this.currentChatUrl || this.config.url;
     const currentUrl = this.page.url();
     const targetHost = new URL(this.config.url).hostname;
 
-    if (!currentUrl.includes(targetHost) || currentUrl === 'about:blank') {
-      await this.page.goto(this.config.url, { waitUntil: 'domcontentloaded' });
+    // Si necesitamos ir a una URL específica de chat o si la página actual no es del host
+    if (destUrl !== currentUrl && (targetChatUrl || !currentUrl.includes(targetHost) || currentUrl === 'about:blank')) {
+      await this.page.goto(destUrl, { waitUntil: 'domcontentloaded' });
       await this.page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
-      await this.page.waitForTimeout(1500);
+      await this.page.waitForTimeout(1000);
     }
 
     const afterUrl = this.page.url();
@@ -169,6 +195,8 @@ export abstract class BaseDriver {
         `Tu sesión de ${this.config.displayName} no está autenticada. Por favor ejecuta: barhel login ${this.config.id}`
       );
     }
+
+    this.currentChatUrl = afterUrl;
   }
 
   /**

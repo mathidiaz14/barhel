@@ -76,10 +76,15 @@ class Logger {
     workdir: string = process.cwd(),
     autonomous = false,
     leaderName = 'DeepSeek',
-    workersStr = 'ChatGPT, Gemini'
+    workersStr = 'ChatGPT, Gemini',
+    sessionTitle?: string,
+    sessionId?: string
   ): void {
     const dirName = path.basename(workdir) || workdir;
     const modeBadge = autonomous ? pc.bgGreen(pc.black(' AUTONOMOUS ')) : pc.bgYellow(pc.black(' SAFE MODE '));
+    const sessionInfo = sessionId
+      ? `${pc.bold(sessionTitle || 'Sesión activa')} ${pc.dim(`(ID: ${sessionId})`)}`
+      : 'Nueva sesión';
     
     console.log(`
 ${pc.cyan(pc.bold('    ____             __          __'))}
@@ -90,10 +95,11 @@ ${pc.cyan(pc.bold('/_____/\\__,_/_/  /_/ /_/\\___//_/   '))}
 ${pc.dim('  Autonomous CLI Coding Assistant (Claude Code & OpenCode Style)')}
 
 ${pc.gray('📁 Workspace:')} ${pc.bold(dirName)} ${pc.dim(`(${workdir})`)}
+${pc.gray('💬 Sesión:')}    ${pc.cyan(sessionInfo)}
 ${pc.gray('🛡️  Mode:')}      ${modeBadge} ${pc.dim('(usa /auto para cambiar)')}
 ${pc.gray('👑 Leader:')}    ${pc.bold(pc.cyan(leaderName))}
 ${pc.gray('👥 Workers:')}   ${pc.yellow(workersStr || 'Ninguno activo')} ${pc.dim('(usa /config o /models)')}
-${pc.gray('💡 Ayuda:')}     ${pc.dim('Escribe tu prompt o usa')} ${pc.cyan('/help')} ${pc.dim('para comandos')}
+${pc.gray('💡 Ayuda:')}     ${pc.dim('Usa')} ${pc.cyan('/resume')} ${pc.dim('para historial,')} ${pc.cyan('/new')} ${pc.dim('para nueva sesión o')} ${pc.cyan('/help')}
 ${pc.gray('═'.repeat(64))}
 `);
   }
@@ -103,10 +109,13 @@ ${pc.gray('═'.repeat(64))}
 ${pc.bold(pc.cyan('Comandos disponibles en el Chat de Barhel:'))}
 
   ${pc.bold(pc.yellow('/help'))}               - Muestra esta lista de comandos de ayuda
+  ${pc.bold(pc.yellow('/resume'))} o ${pc.bold(pc.yellow('/history'))}- Abre el menú para cambiar a una sesión anterior con todo su contexto
+  ${pc.bold(pc.yellow('/new'))}                 - Inicia una nueva sesión limpia y abre un nuevo chat en el LLM
+  ${pc.bold(pc.yellow('/title <texto>'))}       - Renombra el título descriptivo de la sesión actual
+  ${pc.bold(pc.yellow('/sessions'))} o ${pc.bold(pc.yellow('/list'))} - Lista el historial de sesiones guardadas
   ${pc.bold(pc.yellow('/config'))} o ${pc.bold(pc.yellow('/models'))} - Cambia interactivamente el modelo Líder y los Workers
   ${pc.bold(pc.yellow('/auto'))}               - Alterna entre Modo Autónomo y Modo Seguro [y/N]
   ${pc.bold(pc.yellow('/login [name]'))}       - Inicia sesión web (deepseek, claude, chatgpt, gemini, qwen, mistral, perplexity o all)
-  ${pc.bold(pc.yellow('/status'))}             - Muestra el estado de sesiones guardadas
   ${pc.bold(pc.yellow('/clear'))}              - Limpia la pantalla de la terminal
   ${pc.bold(pc.yellow('/exit'))} o ${pc.bold(pc.yellow('/quit'))}       - Cierra la sesión de Barhel
 

@@ -5,14 +5,25 @@ import { logger } from '../utils/logger.js';
 import { listSessionsStatus } from '../utils/session.js';
 import { DriverFactory } from '../drivers/DriverFactory.js';
 import { ConfigManager } from '../utils/config.js';
+import { HistoryManager } from '../utils/history.js';
 import { CLIOptions } from '../types/actions.js';
 
 export async function startInteractiveChat(options: CLIOptions = {}): Promise<void> {
+  // Si se solicitó reanudar sesión interactiva mediante flag --resume / -r
+  let targetSessionId = options.sessionId;
+  if (options.resume && !targetSessionId) {
+    const selected = await HistoryManager.promptSelectSession(options.workdir || process.cwd());
+    if (selected) {
+      targetSessionId = selected.id;
+    }
+  }
+
   // Asegurar que exista configuración de modelos elegidos por el usuario
   const userConfig = await ConfigManager.getOrPromptConfig(false);
 
   const mergedOptions: CLIOptions = {
     ...options,
+    sessionId: targetSessionId,
     leader: options.leader || userConfig.leader,
     workers: options.workers || userConfig.workers,
   };
@@ -24,7 +35,14 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
     const leaderMeta = DriverFactory.getMeta(orchestrator.getLeaderId());
     const leaderName = leaderMeta?.name || orchestrator.getLeaderId();
     const workersNames = orchestrator.getActiveWorkers().join(', ');
-    logger.banner(workdir, orchestrator.isAutonomous(), leaderName, workersNames);
+    logger.banner(
+      workdir,
+      orchestrator.isAutonomous(),
+      leaderName,
+      workersNames,
+      orchestrator.getSessionTitle(),
+      orchestrator.getSessionId()
+    );
   };
 
   printCurrentBanner();
@@ -67,6 +85,63 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
           logger.printHelp();
           break;
 
+        case '/resume':
+        case '/history': {
+          rl.pause();
+          try {
+            const selected = await HistoryManager.promptSelectSession(workdir);
+            if (selected) {
+              await orchestrator.switchSession(selected.id);
+              printCurrentBanner();
+              console.log(pc.green(`✔ Sesión reanudada: "${selected.title}" (ID: ${selected.id})\n`));
+            }
+          } catch (resErr) {
+            logger.error('Error al reanudar sesión', resErr);
+          }
+          rl.resume();
+          break;
+        }
+
+        case '/new': {
+          rl.pause();
+          try {
+            const newSess = await orchestrator.startNewSession(arg || 'Nueva sesión');
+            printCurrentBanner();
+            console.log(pc.green(`✔ Nueva sesión iniciada: "${newSess.title}" (ID: ${newSess.id})\n`));
+          } catch (newErr) {
+            logger.error('Error al iniciar nueva sesión', newErr);
+          }
+          rl.resume();
+          break;
+        }
+
+        case '/title': {
+          if (!arg) {
+            console.log(pc.yellow('Uso: /title <nuevo título descriptivo para esta sesión>'));
+          } else {
+            orchestrator.setSessionTitle(arg);
+            console.log(pc.green(`✔ Título de sesión actualizado a: "${arg}"\n`));
+          }
+          break;
+        }
+
+        case '/sessions':
+        case '/list': {
+          const sessions = HistoryManager.listSessions();
+          console.log(pc.bold('\n📜 Historial de Sesiones Guardadas:'));
+          if (sessions.length === 0) {
+            console.log(pc.dim('  (No hay sesiones guardadas aún)'));
+          } else {
+            for (const s of sessions.slice(0, 10)) {
+              const currentBadge = s.id === orchestrator.getSessionId() ? pc.green(' [ACTIVA]') : '';
+              console.log(`  ${pc.bold(s.id)} - ${pc.cyan(s.title)}${currentBadge}`);
+              console.log(`    ${pc.dim(`📁 ${s.workdir} | 👑 ${s.leader} | ${s.turns.length} turnos | ${s.updatedAt.substring(0, 10)}`)}`);
+            }
+          }
+          console.log();
+          break;
+        }
+
         case '/config':
         case '/models': {
           rl.pause();
@@ -92,8 +167,7 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
           break;
         }
 
-        case '/status':
-        case '/sessions': {
+        case '/status': {
           console.log(pc.bold('\n📊 Estado de Sesiones Guardadas:'));
           const status = listSessionsStatus();
           for (const [provider, info] of Object.entries(status)) {
@@ -133,7 +207,7 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
 
         case '/exit':
         case '/quit':
-          console.log(pc.cyan('\n¡Hasta luego! Cerrando Barhel...'));
+          console.log(pc.cyan('\n¡Hasta luego! Cerrando Barhel y guardando sesión...'));
           await orchestrator.shutdown();
           rl.close();
           process.exit(0);

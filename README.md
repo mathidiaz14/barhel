@@ -81,6 +81,28 @@ barhel login all
 
 ---
 
+---
+
+## 💾 Gestión de Sesiones y Memoria Web
+
+Barhel guarda automáticamente cada sesión en tu máquina y la vincula al **hilo de chat único (`chatUrl`) en la interfaz web del LLM**. Así, el modelo recuerda todo lo que hicieron juntos.
+
+### Reanudar una sesión anterior:
+```bash
+# Abre el selector visual con la lista de tus sesiones, carpetas y títulos:
+barhel resume
+
+# O directamente por ID:
+barhel resume <sessionId>
+```
+
+### Ver el historial de sesiones guardadas:
+```bash
+barhel history
+```
+
+---
+
 ## 🚀 Cómo Usar Barhel
 
 ### 1. Iniciar la CLI Interactiva de Chat en tu Carpeta
@@ -91,8 +113,6 @@ cd /ruta/a/tu/proyecto
 barhel
 ```
 
-¡Si es tu primera vez, te preguntará interactivamente qué modelo quieres como Líder y cuáles como Workers!
-
 ### 2. Slash Commands Disponibles en el Chat
 
 Durante tu conversación en Barhel, puedes usar comandos especiales con `/`:
@@ -100,9 +120,13 @@ Durante tu conversación en Barhel, puedes usar comandos especiales con `/`:
 | Comando | Descripción |
 | :--- | :--- |
 | `/help` | Muestra la lista de comandos disponibles |
+| `/resume` o `/history` | Abre el selector visual para saltar a una sesión anterior con todo su contexto |
+| `/new [título]` | Inicia una nueva sesión limpia y abre un chat nuevo en el LLM web |
+| `/title <texto>` | Renombra el título descriptivo de la sesión actual |
+| `/sessions` o `/list` | Muestra el listado de sesiones recientes guardadas en el disco |
 | `/config` o `/models` | Cambia interactivamente el modelo Líder y Workers al vuelo |
 | `/auto` | Alterna entre **Modo Autónomo** (sin confirmaciones) y **Modo Seguro** (`[y/N]`) |
-| `/status` o `/sessions` | Comprueba el estado de las sesiones persistentes de todos los LLMs |
+| `/status` | Comprueba el estado de las credenciales web guardadas |
 | `/login [proveedor]` | Inicia sesión en cualquier proveedor sin salir del chat |
 | `/clear` | Limpia la pantalla de la terminal |
 | `/exit` o `/quit` | Guarda y cierra la sesión de Barhel de forma ordenada |

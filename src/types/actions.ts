@@ -40,4 +40,7 @@ export interface CLIOptions {
   headless?: boolean;
   maxIterations?: number;
   timeout?: number;
+  sessionId?: string;
+  resume?: boolean;
+  isNewSession?: boolean;
 }

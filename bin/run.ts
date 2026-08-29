@@ -6,6 +6,7 @@ import { startInteractiveChat } from '../src/cli/repl.js';
 import { Orchestrator } from '../src/engine/Orchestrator.js';
 import { DriverFactory } from '../src/drivers/DriverFactory.js';
 import { ConfigManager } from '../src/utils/config.js';
+import { HistoryManager } from '../src/utils/history.js';
 import { listSessionsStatus } from '../src/utils/session.js';
 import { logger } from '../src/utils/logger.js';
 
@@ -19,6 +20,8 @@ program
 // Comando principal: Si no hay argumentos, abre el chat REPL. Si hay argumentos, ejecuta el prompt.
 program
   .argument('[prompt...]', 'Objetivo o instrucción inicial (opcional, si se omite abre el chat interactivo)')
+  .option('-r, --resume [sessionId]', 'Reanuda una sesión previa del historial')
+  .option('-s, --session <id>', 'Especifica un ID de sesión exacto')
   .option('-a, --autonomous', 'Inicia en modo de autonomía total (sin pedir confirmaciones [y/N])', false)
   .option('-w, --workdir <path>', 'Directorio de trabajo del proyecto', process.cwd())
   .option('--leader <provider>', 'Modelo líder específico (deepseek, claude, chatgpt, gemini, qwen, mistral, perplexity)')
@@ -29,6 +32,8 @@ program
     const prompt = promptParts.join(' ').trim();
     const workers = options.workers ? options.workers.split(',').map((s: string) => s.trim()) : undefined;
     const isHeadless = !options.visible;
+    const sessionId = typeof options.resume === 'string' ? options.resume : options.session;
+    const shouldResume = options.resume !== undefined;
 
     // Si no se pasó un prompt, abrir la CLI interactiva tipo Claude Code / OpenCode
     if (!prompt) {
@@ -38,6 +43,8 @@ program
         leader: options.leader,
         workers: workers,
         headless: isHeadless,
+        sessionId: sessionId,
+        resume: shouldResume,
         maxIterations: parseInt(options.maxIterations, 10),
       });
       return;
@@ -52,6 +59,7 @@ program
       leader: options.leader || userConfig.leader,
       workers: workers || userConfig.workers,
       headless: isHeadless,
+      sessionId: sessionId,
       maxIterations: parseInt(options.maxIterations, 10),
     });
 
@@ -60,13 +68,72 @@ program
       const leaderName = leaderMeta?.name || orchestrator.getLeaderId();
       const workersNames = orchestrator.getActiveWorkers().join(', ');
 
-      logger.banner(options.workdir, options.autonomous, leaderName, workersNames);
+      logger.banner(
+        options.workdir,
+        options.autonomous,
+        leaderName,
+        workersNames,
+        orchestrator.getSessionTitle(),
+        orchestrator.getSessionId()
+      );
       await orchestrator.runTurn(prompt);
       await orchestrator.shutdown();
     } catch (err) {
       logger.error('Error fatal durante la ejecución de la tarea', err);
       process.exit(1);
     }
+  });
+
+// Subcomando: Reanudar sesión mediante menú interactivo
+program
+  .command('resume [sessionId]')
+  .alias('continue')
+  .description('Reanuda una sesión de trabajo anterior con todo su contexto y chat web')
+  .option('-w, --workdir <path>', 'Directorio de trabajo del proyecto', process.cwd())
+  .option('--visible', 'Muestra la ventana visible del navegador', false)
+  .action(async (sessionIdArg, options) => {
+    let targetSessionId = sessionIdArg;
+
+    if (!targetSessionId) {
+      const selected = await HistoryManager.promptSelectSession(options.workdir);
+      if (selected) {
+        targetSessionId = selected.id;
+      }
+    }
+
+    await startInteractiveChat({
+      workdir: options.workdir,
+      headless: !options.visible,
+      sessionId: targetSessionId,
+    });
+  });
+
+// Subcomando: Historial de sesiones
+program
+  .command('history')
+  .alias('list')
+  .description('Muestra el historial de todas las sesiones de trabajo guardadas')
+  .action(() => {
+    const sessions = HistoryManager.listSessions();
+    console.log(pc.bold('\n📜 Historial de Sesiones Guardadas en Barhel:'));
+
+    if (sessions.length === 0) {
+      console.log(pc.dim('  (No hay sesiones guardadas aún)'));
+      console.log(pc.cyan('\nInicia una sesión con: barhel\n'));
+      return;
+    }
+
+    for (const s of sessions) {
+      console.log(`\n  ${pc.cyan(pc.bold(s.id))} - ${pc.bold(s.title)}`);
+      console.log(`    📁 ${pc.gray('Carpeta:')} ${s.workdir}`);
+      console.log(`    👑 ${pc.gray('Líder:')}   ${s.leader} | 👥 ${pc.gray('Workers:')} ${s.workers.join(', ') || 'ninguno'}`);
+      console.log(`    🔄 ${pc.gray('Turnos:')}  ${s.turns.length} | 🕒 ${pc.gray('Actualizado:')} ${s.updatedAt.substring(0, 19).replace('T', ' ')}`);
+      if (s.chatUrl) {
+        console.log(`    🌐 ${pc.gray('Chat Web:')} ${pc.dim(s.chatUrl)}`);
+      }
+    }
+    console.log(pc.cyan('\nPara reanudar cualquiera de estas sesiones:'));
+    console.log(`  ${pc.bold('barhel resume <ID>')}\n`);
   });
 
 // Subcomando: Configurar interactivamente modelos Líder y Workers
@@ -108,11 +175,11 @@ program
     }
   });
 
-// Subcomando: Estado de sesiones
+// Subcomando: Estado de perfiles de autenticación
 program
-  .command('sessions')
+  .command('auth-status')
   .alias('status')
-  .description('Muestra el estado de las sesiones persistentes almacenadas en el sistema')
+  .description('Muestra el estado de las credenciales y perfiles de navegador almacenados')
   .action(() => {
     logger.info('Verificando perfiles de sesión locales...\n');
     const status = listSessionsStatus();

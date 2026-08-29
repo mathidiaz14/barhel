@@ -6,6 +6,7 @@ import { CLIOptions, WorkerAgentType } from '../types/actions.js';
 import { ProviderType } from '../types/providers.js';
 import { logger } from '../utils/logger.js';
 import { ConfigManager } from '../utils/config.js';
+import { HistoryManager, ChatSession, TurnRecord } from '../utils/history.js';
 import pc from 'picocolors';
 
 export class Orchestrator {
@@ -15,6 +16,7 @@ export class Orchestrator {
   private workerDrivers: Map<string, BaseDriver> = new Map();
   private toolEngine: ToolEngine;
   private options: CLIOptions;
+  private currentSession: ChatSession;
   private isShuttingDown = false;
   private isInitialized = false;
   private turnCount = 0;
@@ -32,14 +34,60 @@ export class Orchestrator {
       workdir: options.workdir ?? process.cwd(),
       leader,
       workers,
+      sessionId: options.sessionId,
     };
 
     this.leaderId = String(leader);
     this.activeWorkers = workers.map(String);
     this.toolEngine = new ToolEngine(this.options.workdir, this.options.autonomous);
+
+    // Cargar sesión existente o crear una nueva
+    if (this.options.sessionId) {
+      const existing = HistoryManager.getSession(this.options.sessionId);
+      if (existing) {
+        this.currentSession = existing;
+        this.leaderId = existing.leader;
+        this.activeWorkers = existing.workers;
+      } else {
+        this.currentSession = HistoryManager.createSession({
+          workdir: this.options.workdir,
+          leader: this.leaderId,
+          workers: this.activeWorkers,
+        });
+      }
+    } else {
+      this.currentSession = HistoryManager.createSession({
+        workdir: this.options.workdir,
+        leader: this.leaderId,
+        workers: this.activeWorkers,
+      });
+    }
+
+    this.turnCount = this.currentSession.turns.length;
     this.leaderDriver = DriverFactory.createDriver(this.leaderId);
 
+    if (this.currentSession.chatUrl) {
+      this.leaderDriver.setChatUrl(this.currentSession.chatUrl);
+    }
+
     this.setupProcessSignals();
+  }
+
+  public getSession(): ChatSession {
+    return this.currentSession;
+  }
+
+  public getSessionId(): string {
+    return this.currentSession.id;
+  }
+
+  public getSessionTitle(): string {
+    return this.currentSession.title;
+  }
+
+  public setSessionTitle(newTitle: string): void {
+    this.currentSession.title = newTitle.trim();
+    HistoryManager.saveSession(this.currentSession);
   }
 
   public getLeaderId(): string {
@@ -74,9 +122,14 @@ export class Orchestrator {
       this.leaderId = newLeaderId;
       this.leaderDriver = DriverFactory.createDriver(newLeaderId);
       this.isInitialized = false;
-      this.turnCount = 0;
     }
     this.activeWorkers = newWorkers;
+
+    // Actualizar sesión actual y configuración
+    this.currentSession.leader = this.leaderId;
+    this.currentSession.workers = this.activeWorkers;
+    HistoryManager.saveSession(this.currentSession);
+
     ConfigManager.saveConfig({
       leader: this.leaderId,
       workers: this.activeWorkers,
@@ -86,13 +139,71 @@ export class Orchestrator {
   }
 
   /**
+   * Cambia a una sesión guardada previa, cargando su hilo web exacto
+   */
+  public async switchSession(sessionId: string): Promise<ChatSession> {
+    const targetSession = HistoryManager.getSession(sessionId);
+    if (!targetSession) {
+      throw new Error(`Sesión ${sessionId} no encontrada en el historial.`);
+    }
+
+    logger.info(`Cargando sesión [${targetSession.id}] "${targetSession.title}"...`);
+
+    // Si el modelo líder es diferente, recrear el driver
+    if (targetSession.leader !== this.leaderId) {
+      await this.leaderDriver.close();
+      this.leaderId = targetSession.leader;
+      this.leaderDriver = DriverFactory.createDriver(this.leaderId);
+      this.isInitialized = false;
+    }
+
+    this.currentSession = targetSession;
+    this.turnCount = targetSession.turns.length;
+    this.activeWorkers = targetSession.workers;
+
+    if (targetSession.chatUrl) {
+      this.leaderDriver.setChatUrl(targetSession.chatUrl);
+      if (this.isInitialized) {
+        await this.leaderDriver.ensureChatPage(targetSession.chatUrl);
+      }
+    }
+
+    return this.currentSession;
+  }
+
+  /**
+   * Inicia una nueva sesión limpia con un nuevo chat en el LLM
+   */
+  public async startNewSession(title?: string): Promise<ChatSession> {
+    logger.info('Creando nueva sesión limpia de Barhel...');
+
+    const newSession = HistoryManager.createSession({
+      workdir: this.toolEngine.getWorkdir(),
+      leader: this.leaderId,
+      workers: this.activeWorkers,
+      title: title || 'Nueva sesión',
+    });
+
+    this.currentSession = newSession;
+    this.turnCount = 0;
+    this.leaderDriver.setChatUrl(undefined);
+
+    if (this.isInitialized) {
+      // Navegar a URL base para abrir nuevo chat limpio
+      await this.leaderDriver.ensureChatPage();
+    }
+
+    return this.currentSession;
+  }
+
+  /**
    * Captura señales de interrupción para cerrar navegadores ordenadamente
    */
   private setupProcessSignals(): void {
     const cleanup = async () => {
       if (this.isShuttingDown) return;
       this.isShuttingDown = true;
-      logger.warn('\nCerrando Barhel y liberando sesiones...');
+      logger.warn('\nCerrando Barhel y guardando sesión...');
       await this.shutdown();
       process.exit(0);
     };
@@ -111,7 +222,7 @@ export class Orchestrator {
 
     logger.startSpinner(`Iniciando sesión de Barhel con ${leaderName}...`);
     try {
-      await this.leaderDriver.init(this.options.headless);
+      await this.leaderDriver.init(this.options.headless, this.currentSession.chatUrl);
       this.isInitialized = true;
       logger.stopSpinner();
       logger.success(`Barhel está listo con Agente Líder [${leaderName}].`);
@@ -149,12 +260,25 @@ export class Orchestrator {
       await this.initSession();
     }
 
+    // Auto-generar título si es la primera instrucción de la sesión
+    if (
+      this.currentSession.turns.length === 0 ||
+      this.currentSession.title === 'Nueva sesión de trabajo' ||
+      this.currentSession.title === 'Nueva sesión'
+    ) {
+      this.currentSession.title = HistoryManager.generateTitle(userGoal);
+    }
+
     this.turnCount++;
     const isFirstTurn = this.turnCount === 1;
     let nextPrompt = isFirstTurn ? this.buildSystemPrompt(userGoal) : this.buildTurnPrompt(userGoal);
 
     let iteration = 0;
     const maxIterations = this.options.maxIterations ?? 25;
+    const currentTurnRecord: TurnRecord = {
+      prompt: userGoal,
+      timestamp: new Date().toISOString(),
+    };
 
     while (iteration < maxIterations && !this.isShuttingDown) {
       iteration++;
@@ -166,6 +290,12 @@ export class Orchestrator {
       } catch (err) {
         logger.error(`Error de comunicación con ${this.leaderDriver.displayName}`, err);
         break;
+      }
+
+      // Capturar la URL actual del chat web para mantener persistencia 1-a-1
+      const currentChatUrl = this.leaderDriver.getChatUrl();
+      if (currentChatUrl) {
+        this.currentSession.chatUrl = currentChatUrl;
       }
 
       // Parsear respuesta con tolerancia a fallos
@@ -189,6 +319,9 @@ export class Orchestrator {
       }
 
       const { thought, action } = parseResult.data;
+      currentTurnRecord.thought = thought;
+      currentTurnRecord.actionType = action.type;
+      currentTurnRecord.summary = action.summary;
 
       // Mostrar razonamiento del modelo
       logger.thought(thought);
@@ -250,16 +383,30 @@ export class Orchestrator {
       }
     }
 
+    // Persistir registro de turno y sesión en disco
+    this.currentSession.turns.push(currentTurnRecord);
+    const finalChatUrl = this.leaderDriver.getChatUrl();
+    if (finalChatUrl) {
+      this.currentSession.chatUrl = finalChatUrl;
+    }
+    HistoryManager.saveSession(this.currentSession);
+
     if (iteration >= maxIterations) {
       logger.warn(`Se alcanzó el límite de pasos ReAct (${maxIterations}).`);
     }
   }
 
   /**
-   * Cierra ordenadamente todas las instancias de navegadores
+   * Cierra ordenadamente todas las instancias de navegadores y persiste la sesión
    */
   public async shutdown(): Promise<void> {
     try {
+      const finalChatUrl = this.leaderDriver.getChatUrl();
+      if (finalChatUrl) {
+        this.currentSession.chatUrl = finalChatUrl;
+      }
+      HistoryManager.saveSession(this.currentSession);
+
       await this.leaderDriver.close();
       for (const [, driver] of this.workerDrivers.entries()) {
         await driver.close();
