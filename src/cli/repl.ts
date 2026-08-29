@@ -104,6 +104,10 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
     process.exit(1);
   }
 
+  // Historial de prompts para navegación con flechas Arriba/Abajo
+  const initialPrompts = orchestrator.getSession().turns.map((t) => t.prompt).filter(Boolean);
+  const promptHistory: string[] = [...initialPrompts].reverse();
+
   // Completer nativo para Tab
   const completer = (linePartial: string): [string[], string] => {
     const allCmds = AVAILABLE_SLASH_COMMANDS.flatMap((c) => [c.name, ...(c.aliases || [])]);
@@ -140,7 +144,9 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
         const selected = await HistoryManager.promptSelectSession(workdir);
         if (selected) {
           await orchestrator.switchSession(selected.id);
-          console.clear();
+          promptHistory.length = 0;
+          const resumedPrompts = orchestrator.getSession().turns.map((t) => t.prompt).filter(Boolean);
+          promptHistory.push(...[...resumedPrompts].reverse());
           printCurrentBanner();
           TUI.renderSessionHistory(orchestrator.getSession());
           console.log(pc.green(`[ok] Sesion reanudada: "${selected.title}" (#${selected.id})\n`));
@@ -150,6 +156,7 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
 
       case '/new': {
         const newSess = await orchestrator.startNewSession(arg || 'Nueva sesion');
+        promptHistory.length = 0;
         printCurrentBanner();
         console.log(pc.green(`[ok] Nueva sesion: "${newSess.title}" (#${newSess.id})\n`));
         break;
@@ -410,6 +417,8 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
         output: process.stdout,
         prompt: TUI.getPromptPrefix('barhel'),
         completer,
+        history: promptHistory,
+        historySize: 1000,
       });
 
       const onSigint = async () => {
@@ -428,6 +437,16 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
       rl.question(TUI.getPromptPrefix('barhel'), (answer) => {
         process.removeListener('SIGINT', onSigint);
         rl.close();
+
+        const trimmed = (answer || '').trim();
+        if (trimmed) {
+          const idx = promptHistory.indexOf(trimmed);
+          if (idx !== -1) {
+            promptHistory.splice(idx, 1);
+          }
+          promptHistory.unshift(trimmed);
+        }
+
         resolve(answer);
       });
     });
