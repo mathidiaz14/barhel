@@ -2,7 +2,7 @@ import readline from 'node:readline';
 import path from 'node:path';
 import fs from 'node:fs';
 import pc from 'picocolors';
-import { select, search, input as promptInput } from '@inquirer/prompts';
+import { search, input as promptInput } from '@inquirer/prompts';
 import { Orchestrator } from '../engine/Orchestrator.js';
 import { logger } from '../utils/logger.js';
 import { listSessionsStatus } from '../utils/session.js';
@@ -13,27 +13,27 @@ import { TUI } from './tui.js';
 import { CLIOptions } from '../types/actions.js';
 
 const AVAILABLE_SLASH_COMMANDS = [
-  { name: '/workers', desc: 'Inspector de análisis de agentes secundarios (Claude, ChatGPT, etc.)', aliases: ['/analysis', '/inspect'] },
-  { name: '/think', desc: 'Alterna modo de razonamiento (resumido OpenCode / extendido)', aliases: ['/thinking'] },
-  { name: '/resume', desc: 'Reanuda una sesión anterior con todo su contexto web', aliases: ['/history'] },
-  { name: '/new', desc: 'Inicia una nueva sesión limpia con chat nuevo en el LLM' },
-  { name: '/title', desc: 'Cambia el título descriptivo de la sesión actual', needsArg: 'Nuevo título:' },
+  { name: '/workers', desc: 'Inspector de analisis de agentes secundarios (Claude, ChatGPT, etc.)', aliases: ['/analysis', '/inspect'] },
+  { name: '/think', desc: 'Alterna modo de razonamiento (resumido / extendido)', aliases: ['/thinking'] },
+  { name: '/resume', desc: 'Reanuda una sesion anterior con todo su contexto', aliases: ['/history'] },
+  { name: '/new', desc: 'Inicia una nueva sesion limpia con chat nuevo en el LLM' },
+  { name: '/title', desc: 'Cambia el titulo descriptivo de la sesion actual', needsArg: 'Nuevo titulo:' },
   { name: '/sessions', desc: 'Lista el historial de sesiones guardadas', aliases: ['/list'] },
-  { name: '/config', desc: 'Configura interactivamente modelo Líder y Workers', aliases: ['/models'] },
-  { name: '/auto', desc: 'Alterna entre modo Autónomo y Seguro [y/N]' },
-  { name: '/status', desc: 'Muestra estado de autenticación de proveedores' },
+  { name: '/config', desc: 'Configura modelo Lider y Workers', aliases: ['/models'] },
+  { name: '/auto', desc: 'Alterna entre modo Autonomo y Seguro [y/N]' },
+  { name: '/status', desc: 'Muestra estado de autenticacion de proveedores' },
   { name: '/plan', desc: 'Alterna modo PLAN ONLY (simula cambios sin aplicarlos)' },
   { name: '/commit', desc: 'Commit git de los cambios del workspace', needsArg: 'Mensaje de commit (opcional):', optionalArg: true },
   { name: '/review', desc: 'Muestra git status y diff detallado del workspace' },
-  { name: '/explain', desc: 'Pide al líder que explique un símbolo o archivo', needsArg: 'Símbolo o archivo a explicar:' },
-  { name: '/fix', desc: 'Pide al líder que analice y corrija errores del proyecto', needsArg: 'Descripción del error (opcional):', optionalArg: true },
-  { name: '/export', desc: 'Exporta la sesión actual a Markdown o JSON', needsArg: 'Formato (md/json) o ruta:', optionalArg: true },
-  { name: '/summarize', desc: 'Genera y muestra el resumen de memoria de la sesión' },
-  { name: '/leader', desc: 'Cambia el modelo líder rápidamente', needsArg: 'Nombre del modelo:' },
-  { name: '/login', desc: 'Inicia sesión en la interfaz web de un proveedor' },
+  { name: '/explain', desc: 'Pide al lider que explique un simbolo o archivo', needsArg: 'Simbolo o archivo a explicar:' },
+  { name: '/fix', desc: 'Pide al lider que analice y corrija errores del proyecto', needsArg: 'Descripcion del error (opcional):', optionalArg: true },
+  { name: '/export', desc: 'Exporta la sesion actual a Markdown o JSON', needsArg: 'Formato (md/json) o ruta:', optionalArg: true },
+  { name: '/summarize', desc: 'Genera y muestra el resumen de memoria de la sesion' },
+  { name: '/leader', desc: 'Cambia el modelo lider rapidamente', needsArg: 'Nombre del modelo:' },
+  { name: '/login', desc: 'Inicia sesion en la interfaz web de un proveedor' },
   { name: '/clear', desc: 'Limpia la pantalla de la terminal' },
   { name: '/help', desc: 'Muestra la lista de todos los comandos y ayuda' },
-  { name: '/exit', desc: 'Cierra Barhel y guarda la sesión', aliases: ['/quit'] },
+  { name: '/exit', desc: 'Cierra Barhel y guarda la sesion', aliases: ['/quit'] },
 ];
 
 export async function startInteractiveChat(options: CLIOptions = {}): Promise<void> {
@@ -78,8 +78,8 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
     await orchestrator.initSession();
   } catch (err) {
     const leaderId = orchestrator.getLeaderId();
-    logger.error(`No se pudo inicializar la sesión con ${leaderId}.`, err);
-    console.log(pc.yellow('\nTip: Asegúrate de haber iniciado sesión previamente con:'));
+    logger.error(`No se pudo inicializar la sesion con ${leaderId}.`, err);
+    console.log(pc.yellow('\nTip: Asegurate de haber iniciado sesion previamente con:'));
     console.log(pc.bold(pc.cyan(`  barhel login ${leaderId}\n`)));
     process.exit(1);
   }
@@ -100,7 +100,7 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
 
   rl.prompt();
 
-  // Función ejecutora de comandos
+  // Funcion ejecutora de comandos
   const runCommand = async (command: string, arg: string): Promise<void> => {
     switch (command) {
       case '/help':
@@ -117,9 +117,9 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
       case '/thinking': {
         const isFull = TUI.toggleThinkingDisplay();
         if (isFull) {
-          console.log(`\n${pc.magenta('💭 Modo de Razonamiento:')} ${pc.bgGreen(pc.black(' EXTENDIDO (Completo) '))}\n`);
+          console.log(`\n${pc.cyan('[reasoning]')} ${pc.green('Extended (full)')}\n`);
         } else {
-          console.log(`\n${pc.magenta('💭 Modo de Razonamiento:')} ${pc.bgYellow(pc.black(' RESUMIDO (OpenCode Style) '))}\n`);
+          console.log(`\n${pc.cyan('[reasoning]')} ${pc.yellow('Compact (+ Thought: Xms)')}\n`);
         }
         break;
       }
@@ -130,25 +130,25 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
         if (selected) {
           await orchestrator.switchSession(selected.id);
           printCurrentBanner();
-          console.log(pc.green(`✔ Sesión reanudada: "${selected.title}" (ID: ${selected.id})\n`));
+          console.log(pc.green(`[ok] Sesion reanudada: "${selected.title}" (#${selected.id})\n`));
         }
         break;
       }
 
       case '/new': {
-        const newSess = await orchestrator.startNewSession(arg || 'Nueva sesión');
+        const newSess = await orchestrator.startNewSession(arg || 'Nueva sesion');
         printCurrentBanner();
-        console.log(pc.green(`✔ Nueva sesión iniciada: "${newSess.title}" (ID: ${newSess.id})\n`));
+        console.log(pc.green(`[ok] Nueva sesion: "${newSess.title}" (#${newSess.id})\n`));
         break;
       }
 
       case '/title': {
         if (!arg) {
-          console.log(pc.yellow('Uso: /title <nuevo título descriptivo para esta sesión>'));
+          console.log(pc.yellow('Uso: /title <nuevo titulo para esta sesion>'));
         } else {
           orchestrator.setSessionTitle(arg);
           printCurrentBanner();
-          console.log(pc.green(`✔ Título de la sesión actualizado: "${arg}"\n`));
+          console.log(pc.green(`[ok] Titulo actualizado: "${arg}"\n`));
         }
         break;
       }
@@ -156,14 +156,14 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
       case '/sessions':
       case '/list': {
         const sessions = HistoryManager.listSessions();
-        console.log(pc.bold('\n📜 Historial de Sesiones Guardadas:'));
+        console.log(pc.bold('\nHistorial de sesiones:'));
         if (sessions.length === 0) {
-          console.log(pc.dim('  (No hay sesiones guardadas aún)'));
+          console.log(pc.dim('  (No hay sesiones guardadas)'));
         } else {
           for (const s of sessions.slice(0, 10)) {
-            const currentBadge = s.id === orchestrator.getSessionId() ? pc.green(' [ACTIVA]') : '';
+            const currentBadge = s.id === orchestrator.getSessionId() ? pc.green(' [active]') : '';
             console.log(`  ${pc.bold(s.id)} - ${pc.cyan(s.title)}${currentBadge}`);
-            console.log(`    ${pc.dim(`📁 ${s.workdir} | 👑 ${s.leader} | ${s.turns.length} turnos | ${s.updatedAt.substring(0, 10)}`)}`);
+            console.log(`    ${pc.dim(`${s.workdir} | leader: ${s.leader} | ${s.turns.length} turns | ${s.updatedAt.substring(0, 10)}`)}`);
           }
         }
         console.log();
@@ -182,22 +182,22 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
       case '/auto': {
         const isAuto = orchestrator.toggleAutonomous();
         if (isAuto) {
-          console.log(`\n🛡️  Modo Autónomo: ${pc.bgGreen(pc.black(' ACTIVADO '))} (No se pedirán confirmaciones [y/N])\n`);
+          console.log(`\n${pc.cyan('[mode]')} ${pc.green('AUTONOMOUS')} (No confirmations)\n`);
         } else {
-          console.log(`\n🛡️  Modo Seguro: ${pc.bgYellow(pc.black(' ACTIVADO '))} (Se pedirá confirmación interactiva [y/N])\n`);
+          console.log(`\n${pc.cyan('[mode]')} ${pc.yellow('SAFE')} (Confirmation required [y/N])\n`);
         }
         break;
       }
 
       case '/status': {
-        console.log(pc.bold('\n📊 Estado de Sesiones Guardadas:'));
+        console.log(pc.bold('\nEstado de sesiones:'));
         const status = listSessionsStatus();
         for (const [provider, info] of Object.entries(status)) {
-          const badge = info.exists ? pc.green('✔ CONECTADO') : pc.yellow('✖ SIN SESIÓN');
+          const badge = info.exists ? pc.green('[connected]') : pc.yellow('[no session]');
           console.log(`  ${pc.bold(provider.toUpperCase().padEnd(12))}: ${badge} ${pc.dim(`(${info.path})`)}`);
         }
         if (HistoryManager.hasEncryptedSessions() && !process.env.BARHEL_SECRET) {
-          console.log(pc.yellow(`\n⚠ Hay sesiones cifradas (.json.enc). Define BARHEL_SECRET para poder leerlas.`));
+          console.log(pc.yellow(`\nHay sesiones cifradas (.json.enc). Define BARHEL_SECRET para leerlas.`));
         }
         console.log();
         break;
@@ -206,9 +206,9 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
       case '/plan': {
         const isPlan = orchestrator.togglePlanOnly();
         if (isPlan) {
-          console.log(`\n📝 Modo Plan Only: ${pc.bgBlue(pc.black(' ACTIVADO '))} (no se aplicarán cambios)\n`);
+          console.log(`\n${pc.cyan('[plan]')} ${pc.blue('ACTIVATED')} (simulating changes without writing)\n`);
         } else {
-          console.log(`\n📝 Modo Plan Only: ${pc.dim('desactivado')} (se ejecutan los cambios)\n`);
+          console.log(`\n${pc.cyan('[plan]')} ${pc.dim('disabled')} (changes will be executed)\n`);
         }
         break;
       }
@@ -227,27 +227,27 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
 
       case '/review': {
         const review = await orchestrator.reviewGit();
-        console.log('\n' + pc.cyan(pc.bold('🔍 Revisión del workspace (git):')) + '\n');
+        console.log('\n' + pc.cyan(pc.bold('Revision del workspace (git):')) + '\n');
         const lines = review.split('\n');
         console.log(lines.slice(0, 80).join('\n'));
-        if (lines.length > 80) console.log(pc.dim(`... (${lines.length - 80} líneas más)`));
+        if (lines.length > 80) console.log(pc.dim(`... (${lines.length - 80} lineas mas)`));
         console.log();
         break;
       }
 
       case '/explain': {
         if (!arg) {
-          console.log(pc.yellow('Uso: /explain <símbolo o archivo>'));
+          console.log(pc.yellow('Uso: /explain <simbolo o archivo>'));
         } else {
-          await orchestrator.runTurn(`[EXPLAIN] Explica en detalle, con ejemplos del código, qué hace "${arg}" en este proyecto y cómo encaja con el resto. No modifiques nada.`);
+          await orchestrator.runTurn(`[EXPLAIN] Explica en detalle, con ejemplos del codigo, que hace "${arg}" en este proyecto. No modifiques nada.`);
         }
         break;
       }
 
       case '/fix': {
         const goal = arg
-          ? `[FIX] Corrige el siguiente problema reportado: ${arg}. Deja el proyecto validado.`
-          : `[FIX] Analiza los errores de tipo/lint o problemas del workspace y corrígelos en el código.`;
+          ? `[FIX] Corrige el siguiente problema: ${arg}. Deja el proyecto validado.`
+          : `[FIX] Analiza los errores y problemas del workspace y corrigelos en el codigo.`;
         await orchestrator.runTurn(goal);
         break;
       }
@@ -261,7 +261,7 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
         const filePath = path.join(dir, `barhel-session-${session.id}.${format}`);
         try {
           fs.writeFileSync(filePath, format === 'json' ? JSON.stringify(session, null, 2) : HistoryManager.sessionToMarkdown(session), 'utf-8');
-          logger.success(`Sesión exportada: ${filePath}`);
+          logger.success(`Sesion exportada: ${filePath}`);
         } catch (err) {
           logger.error(`No se pudo exportar: ${err}`);
         }
@@ -271,7 +271,7 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
       case '/summarize': {
         const summary = await orchestrator.summarizeSession();
         if (summary) {
-          console.log(pc.cyan('\n🧠 Resumen de memoria generado:\n'));
+          console.log(pc.cyan('\nResumen de memoria de sesion:\n'));
           console.log(summary);
           console.log();
         }
@@ -287,9 +287,9 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
           try {
             await orchestrator.setLeader(target);
             printCurrentBanner();
-            console.log(pc.green(`✔ Líder cambiado a: ${target}\n`));
+            console.log(pc.green(`[ok] Lider cambiado a: ${target}\n`));
           } catch (err) {
-            logger.error(`No se pudo cambiar el líder a "${target}"`, err);
+            logger.error(`No se pudo cambiar el lider a "${target}"`, err);
           }
         }
         break;
@@ -297,11 +297,11 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
 
       case '/login': {
         const target = (arg || orchestrator.getLeaderId()).toLowerCase().trim();
-        console.log(`\n🔑 Iniciando login para ${pc.cyan(target)}...`);
+        console.log(`\nIniciando login para ${pc.cyan(target)}...`);
         try {
           if (target === 'all') {
             for (const p of DriverFactory.getAllProviders()) {
-              console.log(pc.cyan(`\nAbriendo login para ${p.name}...`));
+              console.log(pc.cyan(`\nLogin para ${p.name}...`));
               const driver = p.createDriver();
               await driver.login();
             }
@@ -310,7 +310,7 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
             await driver.login();
           }
         } catch (loginErr) {
-          logger.error(`Error al iniciar sesión para ${target}`, loginErr);
+          logger.error(`Error al iniciar sesion para ${target}`, loginErr);
         }
         break;
       }
@@ -322,33 +322,33 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
 
       case '/exit':
       case '/quit':
-        console.log(pc.cyan('\n¡Hasta luego! Cerrando Barhel y guardando sesión...'));
+        console.log(pc.cyan('\nCerrando Barhel y guardando sesion...'));
         await orchestrator.shutdown();
         rl.close();
         process.exit(0);
 
       default:
-        console.log(pc.yellow(`Comando "${command}" no reconocido. Escribe / y presiona Enter para ver el menú.`));
+        console.log(pc.yellow(`Comando "${command}" no reconocido. Escribe / para ver la paleta de comandos.`));
         break;
     }
   };
 
-  // Menú interactivo de selección de comandos con búsqueda en vivo
+  // Menu interactivo de seleccion de comandos con busqueda en vivo
   const openInteractiveMenu = async (initialQuery = ''): Promise<void> => {
     const choices = AVAILABLE_SLASH_COMMANDS.map((c) => ({
-      name: `${pc.cyan(pc.bold(c.name.padEnd(12)))} ${pc.white(c.desc)}`,
+      name: `${pc.cyan(c.name.padEnd(12))} ${pc.white(c.desc)}`,
       value: c.name,
-      description: `Comando: ${c.name}${c.aliases ? ` (alias: ${c.aliases.join(', ')})` : ''}`,
+      description: `Command: ${c.name}${c.aliases ? ` (aliases: ${c.aliases.join(', ')})` : ''}`,
     }));
 
     choices.push({
-      name: pc.gray('✖ Volver al chat'),
+      name: pc.gray('back to chat'),
       value: '__cancel__',
-      description: 'Cierra el menú de comandos',
+      description: 'Close command palette',
     });
 
     const selectedCommand = await search({
-      message: '⚡ Escribe para filtrar comandos (o navega con flechas):',
+      message: 'Command palette (type to filter):',
       source: async (term) => {
         const query = (term || initialQuery).toLowerCase().replace(/^\//, '').trim();
         if (!query) return choices;
@@ -373,7 +373,7 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
         default: '',
       });
       if (!cmdDef.optionalArg && !finalArg.trim()) {
-        console.log(pc.yellow('Comando cancelado por falta de parámetro obligatorio.'));
+        console.log(pc.yellow('Comando cancelado por falta de parametro.'));
         return;
       }
     }
@@ -389,26 +389,25 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
       return;
     }
 
-    // Si el usuario escribe únicamente "/" o "/menu", abre el menú interactivo con búsqueda en vivo
+    // Si el usuario escribe "/" o "/menu", abre la paleta de busqueda
     if (input === '/' || input === '/menu') {
       rl.pause();
       try {
         await openInteractiveMenu('');
       } catch {
-        // Ignorar interrupción en menú
+        // Ignorar cancelacion
       }
       rl.resume();
       rl.prompt();
       return;
     }
 
-    // Manejo de Slash Commands escritos directamente
+    // Manejo de Slash Commands directos
     if (input.startsWith('/')) {
       const parts = input.split(' ');
       const command = parts[0].toLowerCase();
       const arg = parts.slice(1).join(' ').trim();
 
-      // Verificar si el comando existe directamente o por alias
       const isKnown = AVAILABLE_SLASH_COMMANDS.some(
         (c) => c.name === command || c.aliases?.includes(command)
       );
@@ -418,8 +417,7 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
         if (isKnown) {
           await runCommand(command, arg);
         } else {
-          // Si no se reconoce exactamente, abrir el buscador filtrando por lo que escribió
-          console.log(pc.yellow(`Comando "${command}" no encontrado. Abriendo buscador de comandos...`));
+          console.log(pc.yellow(`Comando "${command}" no reconocido. Abriendo paleta...`));
           await openInteractiveMenu(command);
         }
       } catch (cmdErr) {
@@ -430,19 +428,19 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
       return;
     }
 
-    // Normal Turn Execution
+    // Turno conversacional normal con el agente
     rl.pause();
     try {
       await orchestrator.runTurn(input);
     } catch (err) {
-      logger.error('Error durante la ejecución del turno', err);
+      logger.error('Error durante la ejecucion del turno', err);
     }
     rl.resume();
     rl.prompt();
   });
 
   rl.on('SIGINT', async () => {
-    console.log(pc.cyan('\n¡Hasta luego! Cerrando Barhel y guardando sesión...'));
+    console.log(pc.cyan('\nCerrando Barhel y guardando sesion...'));
     await orchestrator.shutdown();
     process.exit(0);
   });

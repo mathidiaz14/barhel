@@ -19,22 +19,28 @@ export class TUI {
     return this.showFullThinking;
   }
 
+  /**
+   * Inicia el spinner de razonamiento en tiempo real
+   */
   public static startThinking(modelName = 'Líder', customText?: string): void {
     this.stopThinking();
 
     this.thinkingStartTime = Date.now();
     const baseText = customText || `${modelName} pensando`;
 
-    startSpinner(`${pc.cyan('⏺')} ${pc.dim(baseText)} ${pc.cyan('(0.0s)')}`, 'cyan');
+    startSpinner(`${pc.yellow('✻')} ${pc.dim(baseText)} ${pc.yellow('(0.0s)')}`, 'yellow');
 
     this.timerInterval = setInterval(() => {
       if (isSpinnerActive()) {
         const elapsedSec = ((Date.now() - this.thinkingStartTime) / 1000).toFixed(1);
-        updateSpinnerText(`${pc.cyan('⏺')} ${pc.dim(baseText)} ${pc.cyan(`(${elapsedSec}s)`)}`);
+        updateSpinnerText(`${pc.yellow('✻')} ${pc.dim(baseText)} ${pc.yellow(`(${elapsedSec}s)`)}`);
       }
     }, 100);
   }
 
+  /**
+   * Detiene el spinner de pensamiento y retorna el tiempo transcurrido en ms
+   */
   public static stopThinking(): number {
     if (this.timerInterval) {
       clearInterval(this.timerInterval);
@@ -49,37 +55,43 @@ export class TUI {
     return elapsedMs;
   }
 
+  /**
+   * Renderiza el bloque de pensamiento (+ Thought: 159ms)
+   */
   public static renderThought(thought: string, durationMs?: number): void {
     this.stopThinking();
 
     const timeStr = durationMs !== undefined ? `${durationMs}ms` : '0ms';
-    console.log(`${pc.green(pc.bold('⏺ Thought:'))} ${pc.green(timeStr)}`);
+    console.log(`${pc.yellow('+ Thought:')} ${pc.dim(timeStr)}`);
 
     if (this.showFullThinking) {
       const lines = thought.trim().split('\n');
-      console.log(pc.gray('┌─') + pc.dim(' [Extended reasoning]'));
+      console.log(pc.gray('  [Extended reasoning]'));
       for (const line of lines) {
-        console.log(`${pc.gray('│')} ${pc.italic(pc.dim(line))}`);
+        console.log(`  ${pc.dim(line)}`);
       }
-      console.log(pc.gray('└' + '─'.repeat(50)));
+      console.log();
     }
   }
 
+  /**
+   * Renderiza la invocación de herramientas
+   */
   public static renderAction(type: string, details: Record<string, unknown>): void {
     this.stopThinking();
 
     switch (type) {
       case 'read_file':
-        console.log(`${pc.dim('⏺')} ${pc.white('Read')} ${pc.cyan(String(details.path || ''))}`);
+        console.log(`${pc.dim('→')} ${pc.white('Read')} ${pc.cyan(String(details.path || ''))}`);
         break;
 
       case 'write_file':
         const len = typeof details.content === 'string' ? details.content.length : 0;
-        console.log(`${pc.green('⏺')} ${pc.white('Write')} ${pc.cyan(String(details.path || ''))} ${pc.dim(`(${len} bytes)`)}`);
+        console.log(`${pc.green('→')} ${pc.white('Write')} ${pc.cyan(String(details.path || ''))} ${pc.dim(`(${len} bytes)`)}`);
         break;
 
       case 'list_directory':
-        console.log(`${pc.yellow('⏺')} ${pc.white('Glob')} ${pc.cyan(`"${details.path || '.'}/**/*"`)}`);
+        console.log(`${pc.yellow('*')} ${pc.white('Glob')} ${pc.cyan(`"${details.path || '.'}/**/*"`)}`);
         break;
 
       case 'run_command':
@@ -89,7 +101,7 @@ export class TUI {
       case 'delegate_task':
         const agent = String(details.agent || 'worker').toUpperCase();
         const promptPreview = String(details.prompt || '').substring(0, 60);
-        console.log(`${pc.magenta('⏺')} ${pc.magenta(pc.bold(`Task [${agent}]`))} ${pc.dim(`"${promptPreview}..."`)}`);
+        console.log(`${pc.magenta('→')} ${pc.magenta(`Delegate [${agent}]`)} ${pc.dim(`"${promptPreview}..."`)}`);
         break;
 
       case 'delegate_batch':
@@ -97,19 +109,19 @@ export class TUI {
         const agents = Array.isArray(details.tasks)
           ? details.tasks.map((t) => (typeof t === 'object' && t ? String((t as { agent?: string }).agent || '?') : '?').toUpperCase()).join(', ')
           : '';
-        console.log(`${pc.magenta('⏺')} ${pc.magenta(pc.bold(`Batch [${agents || taskCount + ' tareas'}]`))} ${pc.dim(`(${taskCount} workers en paralelo)`)}`);
+        console.log(`${pc.magenta('→')} ${pc.magenta(`Batch [${agents || taskCount + ' tasks'}]`)} ${pc.dim(`(${taskCount} workers)`)}`);
         break;
 
       case 'grep':
-        console.log(`${pc.blue('⏺')} ${pc.white('Search')} ${pc.cyan(String(details.pattern || ''))} ${pc.dim(`en ${details.path || '.'}`)}`);
+        console.log(`${pc.blue('→')} ${pc.white('Search')} ${pc.cyan(String(details.pattern || ''))} ${pc.dim(`in ${details.path || '.'}`)}`);
         break;
 
       case 'glob':
-        console.log(`${pc.blue('⏺')} ${pc.white('Glob')} ${pc.cyan(`"${details.pattern || ''}"`)} ${pc.dim(`en ${details.path || '.'}`)}`);
+        console.log(`${pc.blue('→')} ${pc.white('Glob')} ${pc.cyan(`"${details.pattern || ''}"`)} ${pc.dim(`in ${details.path || '.'}`)}`);
         break;
 
       case 'check':
-        console.log(`${pc.cyan('⏺')} ${pc.white('Check')} ${pc.dim('(typecheck/lint/build del proyecto)')}`);
+        console.log(`${pc.cyan('→')} ${pc.white('Check')} ${pc.dim('(typecheck/lint/build)')}`);
         break;
 
       case 'finish':
@@ -117,11 +129,14 @@ export class TUI {
         break;
 
       default:
-        console.log(`${pc.dim('⏺')} ${pc.white(type)} ${pc.dim(JSON.stringify(details))}`);
+        console.log(`${pc.dim('→')} ${pc.white(type)} ${pc.dim(JSON.stringify(details))}`);
         break;
     }
   }
 
+  /**
+   * Renderiza el resultado de herramientas con caja sobria y profesional
+   */
   public static renderToolResult(toolType: string, success: boolean, output: string): void {
     this.stopThinking();
 
@@ -141,6 +156,9 @@ export class TUI {
     console.log(pc.gray('└' + '─'.repeat(70)) + '\n');
   }
 
+  /**
+   * Renderiza la tarjeta de asistencia de un agente secundario
+   */
   public static renderWorkerDelegation(
     workerName: string,
     subtaskPrompt: string,
@@ -158,29 +176,32 @@ export class TUI {
       durationMs,
     });
 
-    console.log(`${brand.color(pc.bold('⏺ Agent:'))} ${brand.color(brand.label)} ${pc.dim(`[#${record.id}]`)} ${pc.green(durationText)}`);
+    console.log(`${brand.color('→ Agent:')} ${brand.color(brand.label)} ${pc.dim(`[#${record.id}]`)} ${pc.green(durationText)}`);
     console.log(`${pc.dim('  Task:')} ${pc.italic(subtaskPrompt)}`);
 
-    const preview = response.trim().split('\n').slice(0, 8);
+    const preview = response.trim().split('\n').slice(0, 6);
     console.log(brand.border('  ┌' + '─'.repeat(60)));
     for (const line of preview) {
       console.log(`  ${brand.border('│')} ${pc.dim(line)}`);
     }
-    if (response.trim().split('\n').length > 8) {
+    if (response.trim().split('\n').length > 6) {
       console.log(`  ${brand.border('│')} ${pc.cyan(pc.italic(`... (Full analysis in /workers #${record.id})`))}`);
     }
     console.log(brand.border('  └' + '─'.repeat(60)) + '\n');
   }
 
+  /**
+   * Modal interactivo para inspeccionar el análisis completo de los agentes
+   */
   public static async promptWorkerInspection(): Promise<void> {
     const records = WorkerStore.getRecords();
 
     if (records.length === 0) {
-      console.log(pc.yellow('\n⚠ No agent analysis recorded in this session.\n'));
+      console.log(pc.yellow('\nNo agent analysis recorded in this session.\n'));
       return;
     }
 
-    console.log(pc.cyan('\n🔍 Agent Analysis Inspector:'));
+    console.log(pc.cyan('\nAgent Analysis Inspector:'));
 
     const choices = records.map((r) => {
       const brand = this.getWorkerBrand(r.workerName);
@@ -188,7 +209,7 @@ export class TUI {
       const timeStr = r.timestamp.substring(11, 19);
 
       return {
-        name: `${brand.color(pc.bold(`[#${r.id}] ${brand.label}`))} - ${pc.dim(promptPreview)} ${pc.gray(`(${timeStr})`)}`,
+        name: `${brand.color(`[#${r.id}] ${brand.label}`)} - ${pc.dim(promptPreview)} ${pc.gray(`(${timeStr})`)}`,
         value: r.id,
         description: `Task: "${r.subtaskPrompt}" | Size: ${r.fullResponse.length} chars`,
       };
@@ -210,15 +231,20 @@ export class TUI {
     const record = WorkerStore.getRecord(selectedId);
     if (record) {
       const brand = this.getWorkerBrand(record.workerName);
-      console.log('\n' + brand.border('═'.repeat(70)));
-      console.log(`${brand.color(pc.bold(`📋 FULL ANALYSIS: ${brand.label.toUpperCase()} (#${record.id})`))}`);
+      console.log('\n' + brand.border('─'.repeat(70)));
+      console.log(`${brand.color(pc.bold(`ANALYSIS: ${brand.label.toUpperCase()} (#${record.id})`))}`);
       console.log(`${pc.dim('Task:')} ${pc.cyan(record.subtaskPrompt)}`);
       console.log(brand.border('─'.repeat(70)));
       console.log(record.fullResponse.trim());
-      console.log(brand.border('═'.repeat(70)) + '\n');
+      console.log(brand.border('─'.repeat(70)) + '\n');
     }
   }
 
+  /**
+   * Pantalla principal de Barhel dividida en dos columnas:
+   * Columna Izquierda: Logo ASCII sobrio y descripción
+   * Columna Derecha: Panel de Información de Sesión y Contexto
+   */
   public static renderBanner(
     workdir: string = process.cwd(),
     autonomous = false,
@@ -228,71 +254,72 @@ export class TUI {
     sessionId?: string
   ): void {
     const dirName = path.basename(workdir) || workdir;
-    const modeBadge = autonomous 
-      ? pc.bgGreen(pc.black(' AUTONOMOUS ')) 
-      : pc.bgYellow(pc.black(' SAFE MODE '));
-    const sessionName = sessionTitle || 'Sesión de desarrollo';
+    const modeBadge = autonomous ? pc.green('autonomous') : pc.yellow('safe');
+    const sessionName = sessionTitle || 'Sesión de trabajo';
     const idBadge = sessionId ? `#${sessionId.slice(0, 8)}` : '#nueva';
     const version = getBarhelVersion();
 
     const cy = pc.cyan;
-    const mag = pc.magenta;
-    const b = pc.gray;
     const g = pc.dim;
     const w = pc.white;
+    const sep = pc.gray('│');
 
-    console.log(`
-${b('╭─')} ${pc.red('●')} ${pc.yellow('●')} ${pc.green('●')} ${b('─'.repeat(8))} ${pc.bold(w(`BARHEL / OPENCODE`))} ${b('─'.repeat(32))} ${g(`v${version}`)} ${b('─╮')}
-${b('│')}                                                                          ${b('│')}
-${b('│')}     ${cy(pc.bold('____             __          __'))}                                   ${b('│')}
-${b('│')}    ${cy(pc.bold('/ __ )____ ______/ /_  ___   / /'))}   ${g('Autonomous CLI Coding Agent')}      ${b('│')}
-${b('│')}   ${cy(pc.bold('/ __  / __ `/ ___/ __ \\/ _ \\ / / '))}  ${g('Multi-Model Web Architecture')}    ${b('│')}
-${b('│')}  ${cy(pc.bold('/ /_/ / /_/ / /  / / / /  __// /  '))}                                 ${b('│')}
-${b('│')} ${cy(pc.bold('/_____/\\__,_/_/  /_/ /_/\\___//_/   '))}  ${mag(pc.bold('OpenCode & Claude Engine'))}       ${b('│')}
-${b('│')}                                                                          ${b('│')}
-${b('├' + '─'.repeat(74) + '┤')}
-${b('│')} ${g('📂 Workspace :')} ${w(pc.bold(dirName))} ${g(`(${workdir}:main)`)}
-${b('│')} ${g('💬 Sesión    :')} ${cy(sessionName)} ${g(`(${idBadge} • Memoria activa)`)}
-${b('│')} ${g('👑 Modelo    :')} ${pc.bold(cy(leaderName))} ${g('(Líder principal)')}
-${b('│')} ${g('👥 Workers   :')} ${pc.yellow(workersStr || 'Ninguno')} ${g('(Asistentes de soporte)')}
-${b('│')} ${g('🛡️  Modo      :')} ${modeBadge} ${g('(usa /auto para alternar autonomía)')}
-${b('├' + '─'.repeat(74) + '┤')}
-${b('│')} ${g('⚡')} ${pc.bold(w('Paleta de comandos:'))} ${cy('Escribe /')} ${g('para abrir el menú con búsqueda en vivo')}
-${b('│')} ${g('💡')} ${w('Atajos rápidos    :')} ${cy('/workers')} ${g('análisis')} │ ${cy('/resume')} ${g('sesiones')} │ ${cy('/think')} │ ${cy('/help')}
-${b('╰' + '─'.repeat(74) + '╯')}
-`);
+    const leftCol = [
+      cy('    ____             __          __'),
+      cy('   / __ )____ ______/ /_  ___   / /'),
+      cy('  / __  / __ `/ ___/ __ \\/ _ \\ / / '),
+      cy(' / /_/ / /_/ / /  / / / /  __// /  '),
+      cy('/_____/\\__,_/_/  /_/ /_/\\___//_/   '),
+      g('Autonomous Multi-Model Coding Agent'),
+    ];
+
+    const rightCol = [
+      `${g('Session   :')} ${w(sessionName)} ${g(`(${idBadge})`)}`,
+      `${g('Workspace :')} ${w(dirName)} ${g(`(${workdir}:main)`)}`,
+      `${g('Leader    :')} ${cy(leaderName)}`,
+      `${g('Workers   :')} ${pc.yellow(workersStr || 'none')}`,
+      `${g('Mode      :')} ${modeBadge} ${g('(/auto to toggle)')}`,
+      `${g('Version   :')} ${w(`Barhel ${version}`)}`,
+    ];
+
+    console.log();
+    const rows = Math.max(leftCol.length, rightCol.length);
+    for (let i = 0; i < rows; i++) {
+      const left = (leftCol[i] || '').padEnd(38);
+      const right = rightCol[i] || '';
+      console.log(`  ${left}  ${sep}  ${right}`);
+    }
+
+    console.log();
+    console.log(`  ${pc.gray('─'.repeat(88))}`);
+    console.log(`  ${g('Type')} ${cy('/')} ${g('for command palette')} ${g('•')} ${cy('/workers')} ${g('for analysis')} ${g('•')} ${cy('Tab')} ${g('to complete')} ${g('•')} ${cy('/help')}`);
+    console.log(`  ${pc.gray('─'.repeat(88))}`);
+    console.log();
   }
 
   public static getPromptPrefix(leaderName = 'barhel'): string {
-    return `${pc.blue('▌')} ${pc.bold(pc.white(leaderName))} ${pc.gray('❯')} `;
-  }
-
-  public static renderWelcome(): void {
-    console.log();
-    console.log(`  ${pc.bold(pc.white('Welcome to barhel'))}`);
-    console.log(`  ${pc.dim('Your AI coding assistant')}`);
-    console.log();
+    return `${pc.cyan(leaderName)} ${pc.gray('❯')} `;
   }
 
   private static getWorkerBrand(workerName: string): { label: string; color: (s: string) => string; border: (s: string) => string } {
     const key = workerName.toLowerCase();
     if (key.includes('claude')) {
-      return { label: 'Claude', color: pc.magenta, border: pc.magenta };
+      return { label: 'Claude', color: pc.magenta, border: pc.gray };
     }
     if (key.includes('chatgpt') || key.includes('openai')) {
-      return { label: 'ChatGPT', color: pc.green, border: pc.green };
+      return { label: 'ChatGPT', color: pc.green, border: pc.gray };
     }
     if (key.includes('gemini') || key.includes('google')) {
-      return { label: 'Gemini', color: pc.blue, border: pc.blue };
+      return { label: 'Gemini', color: pc.blue, border: pc.gray };
     }
     if (key.includes('qwen')) {
-      return { label: 'Qwen', color: pc.cyan, border: pc.cyan };
+      return { label: 'Qwen', color: pc.cyan, border: pc.gray };
     }
     if (key.includes('mistral')) {
-      return { label: 'Mistral', color: pc.yellow, border: pc.yellow };
+      return { label: 'Mistral', color: pc.yellow, border: pc.gray };
     }
     if (key.includes('perplexity')) {
-      return { label: 'Perplexity', color: pc.blue, border: pc.cyan };
+      return { label: 'Perplexity', color: pc.blue, border: pc.gray };
     }
     return { label: workerName.toUpperCase(), color: pc.cyan, border: pc.gray };
   }
