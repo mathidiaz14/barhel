@@ -63,7 +63,7 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
-    prompt: `${pc.cyan(pc.bold('barhel'))} ${pc.gray('❯')} `,
+    prompt: TUI.getPromptPrefix('barhel'),
   });
 
   rl.prompt();
