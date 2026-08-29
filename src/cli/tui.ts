@@ -1,6 +1,7 @@
 import pc from 'picocolors';
 import path from 'node:path';
 import { select } from '@inquirer/prompts';
+import { createTwoFilesPatch } from 'diff';
 import { WorkerStore } from '../utils/workerStore.js';
 import { startSpinner, stopSpinner, updateSpinnerText, isSpinnerActive } from '../utils/spinner.js';
 import { getBarhelVersion } from '../utils/version.js';
@@ -66,7 +67,7 @@ export class TUI {
   }
 
   /**
-   * Renderiza el bloque de pensamiento (+ Thought: 159ms)
+   * Renderiza el bloque de pensamiento (+ Thought: 159ms y explicación de lo que está haciendo)
    */
   public static renderThought(thought: string, durationMs?: number): void {
     this.stopThinking();
@@ -74,14 +75,55 @@ export class TUI {
     const timeStr = durationMs !== undefined ? `${durationMs}ms` : '0ms';
     console.log(`${pc.yellow('+ Thought:')} ${pc.dim(timeStr)}`);
 
-    if (this.showFullThinking) {
-      const lines = thought.trim().split('\n');
-      console.log(pc.gray('  [Extended reasoning]'));
-      for (const line of lines) {
+    if (thought && thought.trim()) {
+      const lines = thought.trim().split('\n').map((l) => l.trim()).filter(Boolean);
+      const displayLines = this.showFullThinking ? lines : lines.slice(0, 3);
+      for (const line of displayLines) {
         console.log(`  ${pc.dim(line)}`);
+      }
+      if (!this.showFullThinking && lines.length > 3) {
+        console.log(`  ${pc.gray(`... (${lines.length - 3} líneas más de análisis)`)}`);
       }
       console.log();
     }
+  }
+
+  /**
+   * Muestra de forma compacta y coloreada exactamente qué código se va a modificar y por cuál
+   */
+  public static renderDiff(relPath: string, oldContent: string | null, newContent: string): void {
+    if (oldContent === null) {
+      const lineCount = newContent.split('\n').length;
+      console.log(`  ${pc.green('→')} ${pc.white('Crear nuevo archivo:')} ${pc.cyan(relPath)} ${pc.dim(`(${lineCount} líneas)`)}`);
+      return;
+    }
+
+    const patch = createTwoFilesPatch('a/' + relPath, 'b/' + relPath, oldContent, newContent, 'antes', 'después');
+    const lines = patch.split('\n');
+    const changes = lines.filter((l) => /^[\+\-]/.test(l) && !l.startsWith('+++') && !l.startsWith('---'));
+
+    if (changes.length === 0) {
+      console.log(`  ${pc.dim('→')} ${pc.white('Sin cambios en')} ${pc.cyan(relPath)}`);
+      return;
+    }
+
+    const added = changes.filter((l) => l.startsWith('+')).length;
+    const removed = changes.filter((l) => l.startsWith('-')).length;
+
+    console.log(`  ${pc.green('→')} ${pc.white('Modificando')} ${pc.cyan(relPath)} ${pc.dim(`(+${added} / -${removed} líneas)`)}`);
+    console.log(pc.gray('  ┌─ Diff de cambios ──────────────────────────────────────────────────'));
+    const preview = changes.slice(0, 30);
+    for (const line of preview) {
+      if (line.startsWith('+')) {
+        console.log(`  ${pc.gray('│')} ${pc.green(line)}`);
+      } else if (line.startsWith('-')) {
+        console.log(`  ${pc.gray('│')} ${pc.red(line)}`);
+      }
+    }
+    if (changes.length > 30) {
+      console.log(`  ${pc.gray('│')} ${pc.dim(`... (${changes.length - 30} líneas más modificadas)`)}`);
+    }
+    console.log(pc.gray('  └────────────────────────────────────────────────────────────────────\n'));
   }
 
   /**
@@ -145,7 +187,7 @@ export class TUI {
   }
 
   /**
-   * Renderiza el resultado de herramientas con caja sobria y profesional
+   * Renderiza el resultado de herramientas de forma sobria (resumiendo lecturas sin volcar el código entero)
    */
   public static renderToolResult(toolType: string, success: boolean, output: string): void {
     this.stopThinking();
@@ -153,17 +195,58 @@ export class TUI {
     const cleanOutput = output.trim();
     if (!cleanOutput) return;
 
-    const lines = cleanOutput.split('\n');
-    const previewLines = lines.slice(0, 20);
+    switch (toolType) {
+      case 'read_file': {
+        const lines = cleanOutput.split('\n').length;
+        const bytes = Buffer.byteLength(cleanOutput, 'utf-8');
+        console.log(`  ${pc.dim('└')} ${pc.cyan(`Leído con éxito`)} ${pc.dim(`(${lines} líneas, ${bytes} bytes)`)}\n`);
+        break;
+      }
 
-    console.log(pc.gray('┌' + '─'.repeat(70)));
-    for (const line of previewLines) {
-      console.log(`${pc.gray('│')} ${line}`);
+      case 'list_directory':
+      case 'glob': {
+        const count = cleanOutput.split('\n').filter(Boolean).length;
+        console.log(`  ${pc.dim('└')} ${pc.cyan(`${count} archivos encontrados`)}\n`);
+        break;
+      }
+
+      case 'grep': {
+        const count = cleanOutput.split('\n').filter(Boolean).length;
+        console.log(`  ${pc.dim('└')} ${pc.cyan(`${count} coincidencias encontradas`)}\n`);
+        break;
+      }
+
+      case 'write_file': {
+        console.log(`  ${success ? pc.green('✓') : pc.red('✖')} ${pc.white(cleanOutput.split('\n')[0])}\n`);
+        break;
+      }
+
+      case 'check': {
+        console.log(`  ${success ? pc.green('✓') : pc.red('✖')} ${pc.white(cleanOutput.slice(0, 300))}\n`);
+        break;
+      }
+
+      case 'run_command': {
+        const lines = cleanOutput.split('\n');
+        const previewLines = lines.slice(0, 20);
+        console.log(pc.gray('  ┌─ Salida de comando ────────────────────────────────────────────────'));
+        for (const line of previewLines) {
+          console.log(`  ${pc.gray('│')} ${line}`);
+        }
+        if (lines.length > 20) {
+          console.log(`  ${pc.gray('│')} ${pc.dim(`... (${lines.length - 20} líneas más)`)}`);
+        }
+        console.log(pc.gray('  └────────────────────────────────────────────────────────────────────\n'));
+        break;
+      }
+
+      default: {
+        if (!success) {
+          console.log(`  ${pc.red('✖')} ${pc.dim(cleanOutput)}\n`);
+        }
+        break;
+      }
     }
-    if (lines.length > 20) {
-      console.log(`${pc.gray('│')} ${pc.dim(`... (${lines.length - 20} more lines)`)}`);
-    }
-    console.log(pc.gray('└' + '─'.repeat(70)) + '\n');
   }
 
   /**

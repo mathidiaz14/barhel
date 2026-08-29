@@ -472,16 +472,22 @@ export class Orchestrator {
       // Mostrar razonamiento del modelo estilo Claude Code
       TUI.renderThought(thought, thinkDurationMs);
 
-      // Mostrar acción a ejecutar
-      TUI.renderAction(action.type, {
-        path: action.path,
-        command: action.command,
-        agent: action.agent,
-        prompt: action.prompt,
-        tasks: action.tasks,
-        pattern: action.pattern,
-        summary: action.summary,
-      });
+      // Mostrar acción a ejecutar con diff coloreado si es modificación de código
+      if (action.type === 'write_file' && action.path) {
+        const fullPath = path.resolve(this.toolEngine.getWorkdir(), action.path);
+        const oldContent = fs.existsSync(fullPath) ? fs.readFileSync(fullPath, 'utf-8') : null;
+        TUI.renderDiff(action.path, oldContent, action.content || '');
+      } else {
+        TUI.renderAction(action.type, {
+          path: action.path,
+          command: action.command,
+          agent: action.agent,
+          prompt: action.prompt,
+          tasks: action.tasks,
+          pattern: action.pattern,
+          summary: action.summary,
+        });
+      }
 
       // Manejar finalización de la tarea
       if (action.type === 'finish') {
