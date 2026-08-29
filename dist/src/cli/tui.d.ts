@@ -4,13 +4,16 @@ export declare class TUI {
     private static timerInterval;
     private static showFullThinking;
     static toggleThinkingDisplay(): boolean;
+    private static currentModelName;
+    private static currentActionDescription;
+    private static streamedCharCount;
     static isShowingFullThinking(): boolean;
     /**
-     * Inicia el spinner de razonamiento en tiempo real
+     * Inicia el spinner de razonamiento en tiempo real con descripción dinámica
      */
     static startThinking(modelName?: string, customText?: string): void;
     /**
-     * Actualiza el progreso de streaming en vivo con el número de caracteres y lo que el modelo está pensando
+     * Actualiza el progreso de streaming en vivo con el número de caracteres y lo que el modelo está pensando/haciendo
      */
     static updateThinkingChunk(charCount: number, modelName?: string, previewText?: string): void;
     /**

@@ -65,7 +65,14 @@ export async function startInteractiveChat(options = {}) {
             targetSessionId = selected.id;
         }
     }
-    const userConfig = await ConfigManager.getOrPromptConfig(false);
+    else if (!options.isNewSession) {
+        // Si hay una sesión previa en este workspace, cargarla automáticamente para no perder memoria ni chat
+        const workspaceSessions = HistoryManager.listSessions(options.workdir || process.cwd());
+        if (workspaceSessions.length > 0) {
+            targetSessionId = workspaceSessions[0].id;
+        }
+    }
+    const userConfig = await ConfigManager.getOrPromptConfig();
     const mergedOptions = {
         ...options,
         sessionId: targetSessionId,
@@ -87,10 +94,6 @@ export async function startInteractiveChat(options = {}) {
         const workersNames = orchestrator.getActiveWorkers().join(', ');
         TUI.renderBanner(workdir, orchestrator.isAutonomous(), leaderName, workersNames, orchestrator.getSessionTitle(), orchestrator.getSessionId(), orchestrator.getSession().todos);
     };
-    printCurrentBanner();
-    if (orchestrator.getSession().turns.length > 0) {
-        TUI.renderSessionHistory(orchestrator.getSession());
-    }
     try {
         await orchestrator.initSession();
     }
@@ -101,9 +104,19 @@ export async function startInteractiveChat(options = {}) {
         console.log(pc.bold(pc.cyan(`  barhel login ${leaderId}\n`)));
         process.exit(1);
     }
+    // Renderizar banner limpio arriba + el historial completo del chat previo
+    printCurrentBanner();
+    if (orchestrator.getSession().turns.length > 0) {
+        TUI.renderSessionHistory(orchestrator.getSession());
+    }
     // Historial de prompts para navegación con flechas Arriba/Abajo
-    const initialPrompts = orchestrator.getSession().turns.map((t) => t.prompt).filter(Boolean);
-    const promptHistory = [...initialPrompts].reverse();
+    const promptHistory = [];
+    const syncPromptHistory = () => {
+        promptHistory.length = 0;
+        const turnPrompts = orchestrator.getSession().turns.map((t) => t.prompt).filter(Boolean);
+        promptHistory.push(...[...turnPrompts].reverse());
+    };
+    syncPromptHistory();
     // Completer nativo para Tab
     const completer = (linePartial) => {
         const allCmds = AVAILABLE_SLASH_COMMANDS.flatMap((c) => [c.name, ...(c.aliases || [])]);
@@ -257,9 +270,7 @@ export async function startInteractiveChat(options = {}) {
                 const selected = await HistoryManager.promptSelectSession(workdir);
                 if (selected) {
                     await orchestrator.switchSession(selected.id);
-                    promptHistory.length = 0;
-                    const resumedPrompts = orchestrator.getSession().turns.map((t) => t.prompt).filter(Boolean);
-                    promptHistory.push(...[...resumedPrompts].reverse());
+                    syncPromptHistory();
                     printCurrentBanner();
                     TUI.renderSessionHistory(orchestrator.getSession());
                     console.log(pc.green(`[ok] Sesion reanudada: "${selected.title}" (#${selected.id})\n`));

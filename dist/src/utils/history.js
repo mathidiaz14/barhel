@@ -94,9 +94,9 @@ export class HistoryManager {
         return null;
     }
     /**
-     * Lista todas las sesiones guardadas ordenadas por última actualización
+     * Lista todas las sesiones guardadas ordenadas por última actualización (opcionalmente filtradas por workdir)
      */
-    static listSessions() {
+    static listSessions(workdir) {
         this.ensureDir();
         try {
             const files = fs
@@ -126,7 +126,12 @@ export class HistoryManager {
                     // Ignorar archivos corruptos o sin secret
                 }
             }
-            return sessions.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+            let sorted = sessions.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+            if (workdir) {
+                const resolved = path.resolve(workdir).toLowerCase();
+                sorted = sorted.filter((s) => path.resolve(s.workdir).toLowerCase() === resolved);
+            }
+            return sorted;
         }
         catch {
             return [];

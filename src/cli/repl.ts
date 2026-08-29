@@ -65,9 +65,15 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
     if (selected) {
       targetSessionId = selected.id;
     }
+  } else if (!options.isNewSession) {
+    // Si hay una sesión previa en este workspace, cargarla automáticamente para no perder memoria ni chat
+    const workspaceSessions = HistoryManager.listSessions(options.workdir || process.cwd());
+    if (workspaceSessions.length > 0) {
+      targetSessionId = workspaceSessions[0].id;
+    }
   }
 
-  const userConfig = await ConfigManager.getOrPromptConfig(false);
+  const userConfig = await ConfigManager.getOrPromptConfig();
 
   const mergedOptions: CLIOptions = {
     ...options,
@@ -102,12 +108,6 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
     );
   };
 
-  printCurrentBanner();
-
-  if (orchestrator.getSession().turns.length > 0) {
-    TUI.renderSessionHistory(orchestrator.getSession());
-  }
-
   try {
     await orchestrator.initSession();
   } catch (err) {
@@ -118,9 +118,20 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
     process.exit(1);
   }
 
+  // Renderizar banner limpio arriba + el historial completo del chat previo
+  printCurrentBanner();
+  if (orchestrator.getSession().turns.length > 0) {
+    TUI.renderSessionHistory(orchestrator.getSession());
+  }
+
   // Historial de prompts para navegación con flechas Arriba/Abajo
-  const initialPrompts = orchestrator.getSession().turns.map((t) => t.prompt).filter(Boolean);
-  const promptHistory: string[] = [...initialPrompts].reverse();
+  const promptHistory: string[] = [];
+  const syncPromptHistory = () => {
+    promptHistory.length = 0;
+    const turnPrompts = orchestrator.getSession().turns.map((t) => t.prompt).filter(Boolean);
+    promptHistory.push(...[...turnPrompts].reverse());
+  };
+  syncPromptHistory();
 
   // Completer nativo para Tab
   const completer = (linePartial: string): [string[], string] => {
@@ -277,9 +288,7 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
         const selected = await HistoryManager.promptSelectSession(workdir);
         if (selected) {
           await orchestrator.switchSession(selected.id);
-          promptHistory.length = 0;
-          const resumedPrompts = orchestrator.getSession().turns.map((t) => t.prompt).filter(Boolean);
-          promptHistory.push(...[...resumedPrompts].reverse());
+          syncPromptHistory();
           printCurrentBanner();
           TUI.renderSessionHistory(orchestrator.getSession());
           console.log(pc.green(`[ok] Sesion reanudada: "${selected.title}" (#${selected.id})\n`));

@@ -18,39 +18,65 @@ export class TUI {
     return this.showFullThinking;
   }
 
+  private static currentModelName = 'Líder';
+  private static currentActionDescription = 'Analizando contexto y proyecto...';
+  private static streamedCharCount = 0;
+
   public static isShowingFullThinking(): boolean {
     return this.showFullThinking;
   }
 
   /**
-   * Inicia el spinner de razonamiento en tiempo real
+   * Inicia el spinner de razonamiento en tiempo real con descripción dinámica
    */
   public static startThinking(modelName = 'Líder', customText?: string): void {
     this.stopThinking();
     DualPane.setLeaderStatus('Pensando');
 
     this.thinkingStartTime = Date.now();
-    const baseText = customText || `${modelName} pensando`;
+    this.currentModelName = modelName;
+    this.currentActionDescription = customText || 'Analizando contexto y proyecto...';
+    this.streamedCharCount = 0;
 
-    startSpinner(`${pc.yellow('✻')} ${pc.dim(baseText)} ${pc.yellow('(0.0s)')}`, 'yellow');
+    const render = () => {
+      if (!isSpinnerActive()) return;
+      const elapsedSec = ((Date.now() - this.thinkingStartTime) / 1000).toFixed(1);
+      const charsStr = this.streamedCharCount > 0 ? ` • ${this.streamedCharCount} chars` : '';
+      const desc = this.currentActionDescription ? ` ${pc.dim('•')} ${pc.cyan(`"${this.currentActionDescription}"`)}` : '';
+      updateSpinnerText(`${pc.yellow('✻')} ${pc.dim(this.currentModelName)} ${pc.yellow(`(${elapsedSec}s${charsStr})`)}${desc}`);
+    };
+
+    startSpinner(`${pc.yellow('✻')} ${pc.dim(this.currentModelName)} ${pc.yellow('(0.0s)')} ${pc.dim('•')} ${pc.cyan(`"${this.currentActionDescription}"`)}`, 'yellow');
 
     this.timerInterval = setInterval(() => {
-      if (isSpinnerActive()) {
-        const elapsedSec = ((Date.now() - this.thinkingStartTime) / 1000).toFixed(1);
-        updateSpinnerText(`${pc.yellow('✻')} ${pc.dim(baseText)} ${pc.yellow(`(${elapsedSec}s)`)}`);
+      // Si no han llegado tokens todavía, rotar estados informativos
+      if (this.streamedCharCount === 0 && !customText) {
+        const sec = (Date.now() - this.thinkingStartTime) / 1000;
+        if (sec > 5) {
+          this.currentActionDescription = 'Formulando plan de acción y herramientas...';
+        } else if (sec > 2.5) {
+          this.currentActionDescription = 'Examinando estructura de archivos y código...';
+        }
       }
+      render();
     }, 100);
   }
 
   /**
-   * Actualiza el progreso de streaming en vivo con el número de caracteres y lo que el modelo está pensando
+   * Actualiza el progreso de streaming en vivo con el número de caracteres y lo que el modelo está pensando/haciendo
    */
   public static updateThinkingChunk(charCount: number, modelName = 'Líder', previewText?: string): void {
     DualPane.setLeaderStatus('Generando');
+    this.currentModelName = modelName;
+    this.streamedCharCount = charCount;
+    if (previewText) {
+      this.currentActionDescription = previewText;
+    }
     if (isSpinnerActive() && this.thinkingStartTime > 0) {
       const elapsedSec = ((Date.now() - this.thinkingStartTime) / 1000).toFixed(1);
-      const previewStr = previewText ? ` ${pc.dim('•')} ${pc.cyan(`"${previewText}"`)}` : '';
-      updateSpinnerText(`${pc.yellow('✻')} ${pc.dim(`${modelName} analizando`)} ${pc.yellow(`(${elapsedSec}s • ${charCount} chars)`)}${previewStr}`);
+      const charsStr = ` • ${this.streamedCharCount} chars`;
+      const desc = this.currentActionDescription ? ` ${pc.dim('•')} ${pc.cyan(`"${this.currentActionDescription}"`)}` : '';
+      updateSpinnerText(`${pc.yellow('✻')} ${pc.dim(`${this.currentModelName} analizando`)} ${pc.yellow(`(${elapsedSec}s${charsStr})`)}${desc}`);
     }
   }
 
@@ -66,6 +92,7 @@ export class TUI {
 
     const elapsedMs = this.thinkingStartTime > 0 ? Date.now() - this.thinkingStartTime : 0;
     this.thinkingStartTime = 0;
+    this.streamedCharCount = 0;
 
     stopSpinner();
 

@@ -142,9 +142,9 @@ export class HistoryManager {
   }
 
   /**
-   * Lista todas las sesiones guardadas ordenadas por última actualización
+   * Lista todas las sesiones guardadas ordenadas por última actualización (opcionalmente filtradas por workdir)
    */
-  public static listSessions(): ChatSession[] {
+  public static listSessions(workdir?: string): ChatSession[] {
     this.ensureDir();
     try {
       const files = fs
@@ -176,7 +176,12 @@ export class HistoryManager {
         }
       }
 
-      return sessions.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+      let sorted = sessions.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+      if (workdir) {
+        const resolved = path.resolve(workdir).toLowerCase();
+        sorted = sorted.filter((s) => path.resolve(s.workdir).toLowerCase() === resolved);
+      }
+      return sorted;
     } catch {
       return [];
     }

@@ -48,9 +48,9 @@ export declare class HistoryManager {
      */
     static getSession(id: string): ChatSession | null;
     /**
-     * Lista todas las sesiones guardadas ordenadas por última actualización
+     * Lista todas las sesiones guardadas ordenadas por última actualización (opcionalmente filtradas por workdir)
      */
-    static listSessions(): ChatSession[];
+    static listSessions(workdir?: string): ChatSession[];
     /**
      * Comprueba si existen sesiones cifradas que requieren BARHEL_SECRET para leerse
      */

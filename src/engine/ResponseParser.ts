@@ -291,33 +291,91 @@ Debes responder ESTRICTAMENTE con un bloque JSON parseable con esta estructura:
   public static extractStreamingPreview(accumulatedText: string): string | null {
     if (!accumulatedText) return null;
 
-    // 1. Buscar bloques de pensamiento <think>
+    // 1. Detectar acciones concretas inminentes o en progreso
+    if (accumulatedText.includes('"write_file"')) {
+      const pathMatch = accumulatedText.match(/"path"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)/i);
+      if (pathMatch && pathMatch[1]) {
+        return `Escribiendo archivo: ${pathMatch[1].replace(/\\\\/g, '/')}`;
+      }
+      return 'Preparando escritura de archivo...';
+    }
+
+    if (accumulatedText.includes('"run_command"')) {
+      const cmdMatch = accumulatedText.match(/"command"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)/i);
+      if (cmdMatch && cmdMatch[1]) {
+        const cmd = cmdMatch[1].replace(/\\"/g, '"');
+        return `Ejecutando en terminal: ${cmd.length > 40 ? cmd.slice(0, 37) + '...' : cmd}`;
+      }
+      return 'Preparando comando de terminal...';
+    }
+
+    if (accumulatedText.includes('"read_file"')) {
+      const pathMatch = accumulatedText.match(/"path"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)/i);
+      if (pathMatch && pathMatch[1]) {
+        return `Leyendo archivo: ${pathMatch[1].replace(/\\\\/g, '/')}`;
+      }
+      return 'Leyendo archivo de código...';
+    }
+
+    if (accumulatedText.includes('"codegraph"')) {
+      const symMatch = accumulatedText.match(/"symbol"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)/i);
+      if (symMatch && symMatch[1]) {
+        return `Consultando CodeGraph para: ${symMatch[1]}`;
+      }
+      return 'Consultando mapa CodeGraph AST...';
+    }
+
+    if (accumulatedText.includes('"delegate_batch"') || accumulatedText.includes('"delegate_task"')) {
+      const agentMatch = accumulatedText.match(/"agent"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)/i);
+      if (agentMatch && agentMatch[1]) {
+        return `Delegando subtarea a: ${agentMatch[1].toUpperCase()}`;
+      }
+      return 'Delegando tareas a subagentes...';
+    }
+
+    if (accumulatedText.includes('"grep"') || accumulatedText.includes('"glob"')) {
+      const patMatch = accumulatedText.match(/"pattern"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)/i);
+      if (patMatch && patMatch[1]) {
+        return `Buscando coincidencias: "${patMatch[1]}"`;
+      }
+      return 'Buscando en el repositorio...';
+    }
+
+    if (accumulatedText.includes('"check"')) {
+      return 'Ejecutando verificación de tipos y compilación...';
+    }
+
+    if (accumulatedText.includes('"finish"')) {
+      return 'Concluyendo tarea y resumiendo cambios...';
+    }
+
+    // 2. Buscar bloques de pensamiento <think> (DeepSeek R1 / Qwen)
     const thinkMatch = accumulatedText.match(/<think>([\s\S]*?)(?:<\/think>|$)/i);
     if (thinkMatch && thinkMatch[1]) {
-      const thinkLines = thinkMatch[1].trim().split('\n').filter(Boolean);
+      const thinkLines = thinkMatch[1].trim().split('\n').map((l) => l.trim()).filter(Boolean);
       if (thinkLines.length > 0) {
-        const lastLine = thinkLines[thinkLines.length - 1].trim();
+        const lastLine = thinkLines[thinkLines.length - 1];
         if (lastLine.length > 3) {
-          return lastLine.length > 65 ? lastLine.slice(0, 62) + '...' : lastLine;
+          return lastLine.length > 70 ? lastLine.slice(0, 67) + '...' : lastLine;
         }
       }
     }
 
-    // 2. Buscar campo "thought": "..." parcial
+    // 3. Buscar campo "thought": "..." parcial
     const thoughtMatch = accumulatedText.match(/"thought"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)/i);
     if (thoughtMatch && thoughtMatch[1]) {
       const clean = thoughtMatch[1].replace(/\\n/g, ' ').replace(/\\"/g, '"').trim();
       if (clean.length > 3) {
-        return clean.length > 65 ? clean.slice(0, 62) + '...' : clean;
+        return clean.length > 70 ? clean.slice(0, 67) + '...' : clean;
       }
     }
 
-    // 3. Buscar campo "summary": "..."
+    // 4. Buscar campo "summary": "..."
     const summaryMatch = accumulatedText.match(/"summary"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)/i);
     if (summaryMatch && summaryMatch[1]) {
       const clean = summaryMatch[1].replace(/\\n/g, ' ').replace(/\\"/g, '"').trim();
       if (clean.length > 3) {
-        return clean.length > 65 ? clean.slice(0, 62) + '...' : clean;
+        return clean.length > 70 ? clean.slice(0, 67) + '...' : clean;
       }
     }
 
