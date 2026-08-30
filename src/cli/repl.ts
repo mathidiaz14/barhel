@@ -716,7 +716,15 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
     try {
       await orchestrator.runTurn(input);
     } catch (err) {
-      logger.error('Error durante la ejecucion del turno', err);
+      TUI.stopThinking();
+      logger.stopSpinner();
+      const msg = err instanceof Error ? err.message : String(err);
+      console.log(`\n${pc.red('✖ Error durante la ejecución del turno:')} ${pc.white(msg)}`);
+      if (msg.toLowerCase().includes('login') || msg.toLowerCase().includes('sesión') || msg.toLowerCase().includes('campo de entrada') || msg.toLowerCase().includes('autenticad')) {
+        console.log(`  ${pc.yellow('💡 Tip: Inicia sesión en el navegador con:')} ${pc.bold(pc.cyan('barhel login <proveedor>'))}\n`);
+      } else {
+        console.log();
+      }
     }
   }
 

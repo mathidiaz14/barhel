@@ -557,8 +557,8 @@ export class Orchestrator {
         } catch (workerErr) {
           TUI.stopThinking();
           const errMsg = workerErr instanceof Error ? workerErr.message : String(workerErr);
-          logger.error(`Error en worker ${targetAgent}`, workerErr);
-          nextPrompt = `[OBSERVATION ERROR WORKER ${targetAgent.toUpperCase()}]: ${errMsg}\nPor favor resuelve la tarea con tus herramientas locales.`;
+          logger.warn(`Worker ${targetAgent.toUpperCase()} no disponible (${errMsg})`);
+          nextPrompt = `[OBSERVATION WARNING WORKER ${targetAgent.toUpperCase()}]: ${errMsg}\nEl worker no estuvo disponible. Resuelve la tarea con tus herramientas locales (read_file, write_file, run_command, check, eval_code).`;
         }
         continue;
       }
@@ -592,13 +592,22 @@ export class Orchestrator {
           })
         );
 
-        const summaryParts = batchResults.map((r) =>
-          r.ok
-            ? `[WORKER ${r.agent.toUpperCase()}] (${r.ms}ms):\n${r.response}`
-            : `[WORKER ${r.agent.toUpperCase()}] FALLÓ (${r.ms}ms): ${r.error}`
-        );
+        const successful = batchResults.filter((r) => r.ok);
+        const failed = batchResults.filter((r) => !r.ok);
 
-        nextPrompt = `[OBSERVATION DELEGATE_BATCH]:\n${summaryParts.join('\n\n')}\n\nSintetiza los resultados de los workers y continúa tu razonamiento en formato JSON.`;
+        let observation = '';
+        if (successful.length > 0) {
+          observation += `[OBSERVATION DELEGATE_BATCH EXITOSOS]:\n` +
+            successful.map((r) => `[WORKER ${r.agent.toUpperCase()}] (${r.ms}ms):\n${r.response}`).join('\n\n');
+        }
+        if (failed.length > 0) {
+          observation += (observation ? '\n\n' : '') +
+            `[OBSERVATION WORKERS NO DISPONIBLES]:\n` +
+            failed.map((r) => `• ${r.agent.toUpperCase()}: ${r.error}`).join('\n') +
+            `\nContinúa ejecutando la tarea con tus herramientas locales (write_file, run_command, eval_code, etc.).`;
+        }
+
+        nextPrompt = observation || `[OBSERVATION]: No se recibieron respuestas de los workers. Continúa con tus herramientas locales.`;
         continue;
       }
 
