@@ -7,6 +7,7 @@ export interface SessionDashboardState {
     leaderName: string;
     leaderStatus: string;
     workers: Array<{
+        id: string;
         name: string;
         status: string;
     }>;
@@ -34,14 +35,26 @@ export declare class DualPane {
     static updateState(partial: Partial<SessionDashboardState>): void;
     static setTodos(todos: TodoItem[]): void;
     static setLeaderStatus(status: string): void;
+    static setWorkers(workerIds: string[]): void;
     static incrementAction(type: string): void;
     static incrementTurn(): void;
     /**
-     * Genera las líneas de la columna derecha con ancho proporcional y sin espacios vacíos gigantes
+     * Genera el bloque del Banner Superior Izquierdo (ASCII + Subtítulo + Hints)
      */
-    static buildRightPaneLines(): string[];
+    static buildLeftHeaderLines(): string[];
     /**
-     * Renderiza el marco dividido de dos columnas de forma perfectamente balanceada y sin espacios sobrantes
+     * Genera las 3 Cajas del Panel Lateral Derecho
+     * Caja 1: Metadatos de Sesión y Workspace
+     * Caja 2: Estado de Subagentes (Workers) en vivo
+     * Caja 3: Lista de Tareas (TODO List)
      */
-    static renderSplitFrame(leftContentLines: string[]): void;
+    static buildRightSidebarLines(boxWidth?: number): string[];
+    /**
+     * Renderiza el marco inicial de pantalla dividida (Header Izquierdo + Sidebar Derecha de 3 Cajas)
+     */
+    static renderSplitFrame(leftCustomLines?: string[]): void;
+    /**
+     * Renderiza únicamente la Sidebar lateral derecha completa con sus 3 cajas
+     */
+    static renderRightSidebar(): void;
 }

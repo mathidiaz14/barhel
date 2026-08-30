@@ -7,6 +7,7 @@ import { startSpinner, stopSpinner, updateSpinnerText, isSpinnerActive } from '.
 import { getBarhelVersion } from '../utils/version.js';
 import { DualPane } from './DualPane.js';
 import { TodoItem } from '../types/actions.js';
+import { DriverFactory } from '../drivers/DriverFactory.js';
 
 export class TUI {
   private static thinkingStartTime = 0;
@@ -423,7 +424,14 @@ export class TUI {
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean)
-      .map((name) => ({ name, status: 'Listo' }));
+      .map((id) => {
+        const meta = DriverFactory.getMeta(id);
+        return {
+          id: id.toLowerCase(),
+          name: meta?.name || id.toUpperCase(),
+          status: 'idle',
+        };
+      });
 
     DualPane.updateState({
       title: sessionName,
@@ -436,21 +444,7 @@ export class TUI {
       todos: todos || [],
     });
 
-    const cy = pc.cyan;
-    const g = pc.dim;
-
-    const leftCol = [
-      cy('    ____             __          __'),
-      cy('   / __ )____ ______/ /_  ___   / /'),
-      cy('  / __  / __ `/ ___/ __ \\/ _ \\ / / '),
-      cy(' / /_/ / /_/ / /  / / / /  __// /  '),
-      cy('/_____/\\__,_/_/  /_/ /_/\\___//_/   '),
-      g('Autonomous Multi-Model Coding Agent'),
-    ];
-
-    console.log();
-    DualPane.renderSplitFrame(leftCol);
-    console.log();
+    DualPane.renderSplitFrame();
   }
 
   /**
