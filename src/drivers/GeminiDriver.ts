@@ -3,13 +3,15 @@ import { ProviderConfig, ProviderType } from '../types/providers.js';
 
 export const GEMINI_CONFIG: ProviderConfig = {
   id: ProviderType.GEMINI,
-  displayName: 'Gemini (Worker)',
+  displayName: 'Gemini (Flash 2.0 / Pro)',
   url: 'https://gemini.google.com/app',
   sessionDirName: 'gemini',
   defaultTimeoutMs: 300000,
   selectors: {
     inputPrompt: [
       'rich-textarea .ql-editor',
+      'div.ql-editor',
+      'rich-textarea p',
       'div[contenteditable="true"]',
       'rich-textarea div[role="textbox"]',
       'textarea[placeholder*="Ask"]',
@@ -18,26 +20,34 @@ export const GEMINI_CONFIG: ProviderConfig = {
     sendButton: [
       'button[aria-label*="Send message"]',
       'button[aria-label*="Enviar mensaje"]',
+      'button[aria-label*="Send prompt"]',
+      'button[aria-label*="Enviar instrucción"]',
       'button.send-button',
       'button:has(mat-icon[data-mat-icon-name="send"])',
+      'button.send-button-container',
       'button[aria-label*="Send"]',
+      'button:has(svg)',
     ],
     stopButton: [
       'button[aria-label*="Stop response"]',
       'button[aria-label*="Detener respuesta"]',
       'button.stop-button',
       'mat-progress-spinner',
+      'div.loading-indicator',
     ],
     responseContainer: [
       'message-content .model-response-text',
       'message-content',
+      'model-response',
       'div.model-response-text',
       'div.response-container',
       'div.markdown',
+      '.response-text',
     ],
     chatTurns: [
       'conversation-turn',
       'div.conversation-turn',
+      'model-response',
       'message-content',
     ],
   },

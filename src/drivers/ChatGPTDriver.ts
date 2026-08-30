@@ -3,7 +3,7 @@ import { ProviderConfig, ProviderType } from '../types/providers.js';
 
 export const CHATGPT_CONFIG: ProviderConfig = {
   id: ProviderType.CHATGPT,
-  displayName: 'ChatGPT (Worker)',
+  displayName: 'ChatGPT (GPT-4o / o1)',
   url: 'https://chatgpt.com',
   sessionDirName: 'chatgpt',
   defaultTimeoutMs: 300000,
@@ -11,7 +11,9 @@ export const CHATGPT_CONFIG: ProviderConfig = {
     inputPrompt: [
       '#prompt-textarea',
       'div#prompt-textarea[contenteditable="true"]',
+      'div#prompt-textarea',
       'div[contenteditable="true"]',
+      'p[data-placeholder]',
       'textarea[placeholder*="Message"]',
       'textarea',
     ],
@@ -20,6 +22,7 @@ export const CHATGPT_CONFIG: ProviderConfig = {
       'button[data-testid="fruitjuice-send-button"]',
       'button[aria-label*="Send prompt"]',
       'button[aria-label*="Send message"]',
+      'button[aria-label*="Enviar mensaje"]',
       'button:has(svg[viewBox="0 0 24 24"])',
       'button:has(svg)',
     ],
@@ -33,10 +36,12 @@ export const CHATGPT_CONFIG: ProviderConfig = {
       '[data-message-author-role="assistant"] .markdown',
       '[data-message-author-role="assistant"]',
       'article[data-testid^="conversation-turn"] .markdown',
+      'article .markdown',
       'div.markdown',
     ],
     chatTurns: [
       'article[data-testid^="conversation-turn"]',
+      'article',
       'div[data-message-author-role="assistant"]',
     ],
   },
