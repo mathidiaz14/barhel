@@ -520,7 +520,7 @@ export class Orchestrator {
 
       // Manejar finalización de la tarea
       if (action.type === 'finish') {
-        logger.success(`\n🎉 TAREA COMPLETADA:\n${pc.cyan(action.summary || 'Fin del trabajo.')}\n`);
+        console.log(`\n${pc.green('✓')} ${pc.bold(pc.green('TAREA COMPLETADA:'))}\n${pc.white(action.summary || 'Fin del trabajo.')}\n`);
         if (this.autoCommit && (this.options.autonomous ?? false)) {
           await this.tryAutoCommit(action.summary);
         }

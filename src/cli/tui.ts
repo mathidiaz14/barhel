@@ -247,7 +247,6 @@ export class TUI {
         break;
 
       case 'finish':
-        console.log(`\n${pc.green('✓')} ${pc.green(pc.bold('Completed:'))} ${pc.white(String(details.summary || ''))}\n`);
         break;
 
       default:
