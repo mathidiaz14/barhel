@@ -57,28 +57,11 @@ export declare class TUI {
      * Columna Izquierda: Logo ASCII, bienvenida y flujo de conversación
      * Columna Derecha: Panel de Sesión en vivo, Estado del Líder, Workers, Lista de Tareas y Métricas
      */
-    static renderBanner(workdir?: string, autonomous?: boolean, leaderName?: string, workersStr?: string, sessionTitle?: string, sessionId?: string, todos?: TodoItem[]): void;
+    static renderBanner(workdir?: string, autonomous?: boolean, leaderName?: string, workersStr?: string, sessionTitle?: string, sessionId?: string, todos?: TodoItem[], session?: any): void;
     /**
      * Renderiza el historial previo de turnos al reanudar una sesión
      */
-    /**
-     * Renderiza el historial previo de turnos al reanudar una sesión con formato amplio y legible
-     */
-    static renderSessionHistory(session: {
-        id: string;
-        title: string;
-        workdir?: string;
-        turns: Array<{
-            prompt: string;
-            thought?: string;
-            summary?: string;
-            timestamp?: string;
-            actions?: Array<{
-                type: string;
-                details?: Record<string, unknown>;
-            }>;
-        }>;
-    }): void;
+    static renderSessionHistory(session: any): void;
     static getPromptPrefix(leaderName?: string): string;
     private static getWorkerBrand;
 }

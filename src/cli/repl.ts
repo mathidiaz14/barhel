@@ -96,7 +96,6 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
   };
 
   const printCurrentBanner = () => {
-    console.clear();
     const leaderMeta = DriverFactory.getMeta(orchestrator.getLeaderId());
     const leaderName = leaderMeta?.name || orchestrator.getLeaderId();
     const workersNames = orchestrator.getActiveWorkers().join(', ');
@@ -107,7 +106,8 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
       workersNames,
       orchestrator.getSessionTitle(),
       orchestrator.getSessionId(),
-      orchestrator.getSession().todos
+      orchestrator.getSession().todos,
+      orchestrator.getSession()
     );
   };
 
@@ -121,11 +121,8 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
     process.exit(1);
   }
 
-  // Renderizar banner limpio arriba + el historial completo del chat previo
+  // Renderizar dashboard completo en pantalla dividida
   printCurrentBanner();
-  if (orchestrator.getSession().turns.length > 0) {
-    TUI.renderSessionHistory(orchestrator.getSession());
-  }
 
   // Historial de prompts para navegación con flechas Arriba/Abajo
   const promptHistory: string[] = [];
@@ -722,6 +719,8 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
     // Turno conversacional normal con el agente
     try {
       await orchestrator.runTurn(input);
+      syncPromptHistory();
+      printCurrentBanner();
     } catch (err) {
       TUI.stopThinking();
       logger.stopSpinner();

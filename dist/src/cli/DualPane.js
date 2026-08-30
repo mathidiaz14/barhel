@@ -26,6 +26,37 @@ export function padRightVisual(str, targetWidth) {
     }
     return str + ' '.repeat(targetWidth - len);
 }
+/**
+ * Divide un texto en líneas que respeten el ancho máximo visual
+ */
+export function wrapTextVisual(text, maxWidth) {
+    if (!text)
+        return [''];
+    const result = [];
+    const lines = text.split('\n');
+    for (const line of lines) {
+        if (visualLength(line) <= maxWidth) {
+            result.push(line);
+        }
+        else {
+            let current = '';
+            const words = line.split(' ');
+            for (const word of words) {
+                if (visualLength(current + (current ? ' ' : '') + word) <= maxWidth) {
+                    current += (current ? ' ' : '') + word;
+                }
+                else {
+                    if (current)
+                        result.push(current);
+                    current = word;
+                }
+            }
+            if (current)
+                result.push(current);
+        }
+    }
+    return result;
+}
 export class DualPane {
     static state = {
         title: 'Sesión de trabajo',
@@ -71,7 +102,7 @@ export class DualPane {
         this.state.workers = workerIds.map((id) => {
             const meta = DriverFactory.getMeta(id);
             return {
-                id,
+                id: id.toLowerCase(),
                 name: meta?.name || id.toUpperCase(),
                 status: 'idle',
             };
@@ -90,7 +121,7 @@ export class DualPane {
     /**
      * Genera el bloque del Banner Superior Izquierdo (ASCII + Subtítulo + Hints)
      */
-    static buildLeftHeaderLines() {
+    static buildLeftHeaderLines(maxWidth = 54) {
         const lines = [];
         lines.push(pc.cyan('      ____             __          __   '));
         lines.push(pc.cyan('     / __ )____ ______/ /_  ___   / /   '));
@@ -98,8 +129,10 @@ export class DualPane {
         lines.push(pc.cyan('   / /_/ / /_/ / /  / / / /  __// /     '));
         lines.push(pc.cyan('  /_____/\\__,_/_/  /_/ /_/\\___//_/      '));
         lines.push(pc.bold(pc.white('  Autonomous Multi-Model Coding Agent   ')));
-        lines.push(pc.gray('  ' + '─'.repeat(40)));
+        lines.push(pc.gray('  ' + '─'.repeat(Math.min(maxWidth - 4, 46))));
         lines.push(`  ${pc.dim('Type')} ${pc.cyan('/')} ${pc.dim('for palette')} ${pc.dim('•')} ${pc.cyan('/workers')} ${pc.dim('•')} ${pc.cyan('/help')}`);
+        lines.push(pc.gray('  ' + '─'.repeat(Math.min(maxWidth - 4, 46))));
+        lines.push('');
         return lines;
     }
     /**
@@ -160,7 +193,7 @@ export class DualPane {
                         statusText = pc.red('No disponible');
                     }
                 }
-                const nameLabel = w(wrk.name.slice(0, 15).padEnd(15));
+                const nameLabel = w(wrk.name.slice(0, 14).padEnd(14));
                 lines.push(lineWrapper(` ${icon} ${nameLabel} : ${statusText}`));
             }
         }
@@ -174,13 +207,13 @@ export class DualPane {
         else {
             const completedCount = todos.filter((t) => (t.status || '').toLowerCase() === 'completed' || (t.status || '').toLowerCase() === 'done').length;
             const pct = Math.round((completedCount / todos.length) * 100);
-            const barLen = 12;
+            const barLen = 10;
             const filled = Math.round((pct / 100) * barLen);
             const empty = barLen - filled;
             const progressBar = `[${pc.green('█'.repeat(filled))}${pc.dim('░'.repeat(empty))}] ${pct}% (${completedCount}/${todos.length})`;
             lines.push(lineWrapper(` ${progressBar}`));
-            // Mostrar hasta 5 subtareas más relevantes
-            const previewTodos = todos.slice(0, 5);
+            // Mostrar subtareas más relevantes
+            const previewTodos = todos.slice(0, 6);
             previewTodos.forEach((item, idx) => {
                 let statusIcon = pc.dim('[ ]');
                 const st = (item.status || 'pending').toLowerCase();
@@ -194,25 +227,119 @@ export class DualPane {
                     statusIcon = pc.red('[✖]');
                 }
                 const agentTag = item.assignedTo ? g(` [${item.assignedTo.toUpperCase()}]`) : '';
-                const taskName = w(item.task.slice(0, 24));
+                const taskName = w(item.task.slice(0, 22));
                 lines.push(lineWrapper(` ${statusIcon} ${idx + 1}. ${taskName}${agentTag}`));
             });
-            if (todos.length > 5) {
-                lines.push(lineWrapper(g(`    ... (+${todos.length - 5} tareas más)`)));
+            if (todos.length > 6) {
+                lines.push(lineWrapper(g(`    ... (+${todos.length - 6} tareas más)`)));
             }
         }
         lines.push(bottomBorder());
         return lines;
     }
     /**
-     * Renderiza el marco inicial de pantalla dividida (Header Izquierdo + Sidebar Derecha de 3 Cajas)
+     * Construye las líneas formateadas de los turnos previos de la sesión para el panel izquierdo
+     */
+    static buildChatHistoryLines(session, maxChatWidth = 56) {
+        const lines = [];
+        if (!session.turns || session.turns.length === 0)
+            return lines;
+        const workdir = session.workdir || process.cwd();
+        const cleanPath = (rawPath) => {
+            if (!rawPath)
+                return '';
+            try {
+                const normRaw = rawPath.replace(/\\/g, '/');
+                const normWd = workdir.replace(/\\/g, '/');
+                if (normRaw.toLowerCase().startsWith(normWd.toLowerCase())) {
+                    return normRaw.slice(normWd.length).replace(/^\/+/, '') || '.';
+                }
+                return path.relative(workdir, rawPath).replace(/\\/g, '/') || rawPath;
+            }
+            catch {
+                return rawPath;
+            }
+        };
+        session.turns.forEach((turn, idx) => {
+            const time = turn.timestamp ? turn.timestamp.substring(11, 16) : '';
+            const turnHeader = `Turno ${idx + 1}${time ? ` (${time})` : ''}`;
+            const headerBorder = pc.blue('┌─ ') + pc.bold(pc.white(turnHeader)) + pc.blue(' ' + '─'.repeat(Math.max(4, maxChatWidth - turnHeader.length - 6)));
+            lines.push(headerBorder);
+            // Prompt usuario
+            lines.push(`${pc.blue('│')} ${pc.bold(pc.cyan('👤 user ❯'))} ${pc.white(pc.bold(turn.prompt.slice(0, maxChatWidth - 14)))}`);
+            // Razonamiento
+            if (turn.thought && turn.thought.trim()) {
+                lines.push(`${pc.blue('│')}  ${pc.yellow('💭 Razonamiento:')}`);
+                const thoughtLines = turn.thought.trim().split('\n').filter(Boolean).slice(0, 3);
+                for (const tl of thoughtLines) {
+                    lines.push(`${pc.blue('│')}    ${pc.dim(tl.slice(0, maxChatWidth - 8))}`);
+                }
+            }
+            // Acciones
+            if (turn.actions && turn.actions.length > 0) {
+                lines.push(`${pc.blue('│')}  ${pc.magenta('⚡ Acciones:')}`);
+                for (const act of turn.actions) {
+                    if (act.type === 'read_file') {
+                        lines.push(`${pc.blue('│')}    ${pc.dim('• Read')} ${pc.cyan(cleanPath(String(act.details?.path || '')).slice(0, maxChatWidth - 12))}`);
+                    }
+                    else if (act.type === 'write_file') {
+                        lines.push(`${pc.blue('│')}    ${pc.green('• Write')} ${pc.white(cleanPath(String(act.details?.path || '')).slice(0, maxChatWidth - 13))}`);
+                    }
+                    else if (act.type === 'run_command') {
+                        lines.push(`${pc.blue('│')}    ${pc.white('• $')} ${pc.white(String(act.details?.command || '').slice(0, maxChatWidth - 10))}`);
+                    }
+                    else if (act.type === 'delegate_task') {
+                        lines.push(`${pc.blue('│')}    ${pc.magenta('•')} ${pc.magenta(`Delegó a ${String(act.details?.agent || '').toUpperCase()}`)}`);
+                    }
+                    else if (act.type !== 'finish') {
+                        lines.push(`${pc.blue('│')}    ${pc.dim('•')} ${pc.white(act.type)}`);
+                    }
+                }
+            }
+            // Resumen
+            if (turn.summary && turn.summary.trim()) {
+                const sumLine = turn.summary.trim().split('\n')[0];
+                lines.push(`${pc.blue('│')}  ${pc.green('✓ Resumen:')} ${pc.white(sumLine.slice(0, maxChatWidth - 16))}`);
+            }
+            lines.push(pc.blue('└' + '─'.repeat(maxChatWidth - 1)));
+            lines.push('');
+        });
+        return lines;
+    }
+    /**
+     * Renderiza la pantalla completa en Split-Screen permanente (Header + Chat a la izquierda, 3 Cajas a la derecha)
+     */
+    static renderFullScreen(session) {
+        console.clear();
+        const totalCols = process.stdout.columns || 120;
+        const rightBoxWidth = 48;
+        const leftWidth = Math.max(48, totalCols - rightBoxWidth - 5);
+        const sep = pc.gray('│');
+        // 1. Líneas del lado izquierdo: Header fijo + Historial de chat
+        const leftHeaderLines = this.buildLeftHeaderLines(leftWidth);
+        const leftChatLines = session ? this.buildChatHistoryLines(session, leftWidth) : [];
+        const allLeftLines = [...leftHeaderLines, ...leftChatLines];
+        // 2. Líneas del lado derecho: 3 Cajas fijas
+        const rightLines = this.buildRightSidebarLines(rightBoxWidth);
+        // 3. Renderizar fila a fila balanceando ambas columnas
+        const maxRows = Math.max(allLeftLines.length, rightLines.length);
+        for (let r = 0; r < maxRows; r++) {
+            const leftRaw = allLeftLines[r] || '';
+            const rightRaw = rightLines[r] || '';
+            const leftPadded = padRightVisual(leftRaw, leftWidth);
+            console.log(`  ${leftPadded}  ${sep}  ${rightRaw}`);
+        }
+        console.log();
+    }
+    /**
+     * Renderiza el marco inicial de pantalla dividida
      */
     static renderSplitFrame(leftCustomLines) {
         const totalCols = process.stdout.columns || 120;
-        const leftWidth = 44;
-        const rightBoxWidth = Math.min(Math.max(42, totalCols - leftWidth - 6), 56);
+        const rightBoxWidth = 48;
+        const leftWidth = Math.max(48, totalCols - rightBoxWidth - 5);
         const sep = pc.gray('│');
-        const leftLines = leftCustomLines || this.buildLeftHeaderLines();
+        const leftLines = leftCustomLines || this.buildLeftHeaderLines(leftWidth);
         const rightLines = this.buildRightSidebarLines(rightBoxWidth);
         const maxRows = Math.max(leftLines.length, rightLines.length);
         console.log();
@@ -222,16 +349,6 @@ export class DualPane {
             const leftPadded = padRightVisual(leftRaw, leftWidth);
             console.log(`  ${leftPadded}  ${sep}  ${rightRaw}`);
         }
-        console.log();
-    }
-    /**
-     * Renderiza únicamente la Sidebar lateral derecha completa con sus 3 cajas
-     */
-    static renderRightSidebar() {
-        const totalCols = process.stdout.columns || 120;
-        const rightBoxWidth = Math.min(Math.max(44, Math.floor(totalCols * 0.45)), 56);
-        const lines = this.buildRightSidebarLines(rightBoxWidth);
-        lines.forEach((l) => console.log(`  ${l}`));
         console.log();
     }
 }

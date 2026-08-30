@@ -91,11 +91,10 @@ export async function startInteractiveChat(options = {}) {
         console.log(`  ${pc.bold(pc.green(`barhel -s ${sess.id}`))}\n`);
     };
     const printCurrentBanner = () => {
-        console.clear();
         const leaderMeta = DriverFactory.getMeta(orchestrator.getLeaderId());
         const leaderName = leaderMeta?.name || orchestrator.getLeaderId();
         const workersNames = orchestrator.getActiveWorkers().join(', ');
-        TUI.renderBanner(workdir, orchestrator.isAutonomous(), leaderName, workersNames, orchestrator.getSessionTitle(), orchestrator.getSessionId(), orchestrator.getSession().todos);
+        TUI.renderBanner(workdir, orchestrator.isAutonomous(), leaderName, workersNames, orchestrator.getSessionTitle(), orchestrator.getSessionId(), orchestrator.getSession().todos, orchestrator.getSession());
     };
     try {
         await orchestrator.initSession();
@@ -107,11 +106,8 @@ export async function startInteractiveChat(options = {}) {
         console.log(pc.bold(pc.cyan(`  barhel login ${leaderId}\n`)));
         process.exit(1);
     }
-    // Renderizar banner limpio arriba + el historial completo del chat previo
+    // Renderizar dashboard completo en pantalla dividida
     printCurrentBanner();
-    if (orchestrator.getSession().turns.length > 0) {
-        TUI.renderSessionHistory(orchestrator.getSession());
-    }
     // Historial de prompts para navegación con flechas Arriba/Abajo
     const promptHistory = [];
     const syncPromptHistory = () => {
@@ -681,6 +677,8 @@ export async function startInteractiveChat(options = {}) {
         // Turno conversacional normal con el agente
         try {
             await orchestrator.runTurn(input);
+            syncPromptHistory();
+            printCurrentBanner();
         }
         catch (err) {
             TUI.stopThinking();

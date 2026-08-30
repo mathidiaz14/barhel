@@ -415,7 +415,8 @@ export class TUI {
     workersStr = 'ChatGPT, Gemini',
     sessionTitle?: string,
     sessionId?: string,
-    todos?: TodoItem[]
+    todos?: TodoItem[],
+    session?: any
   ): void {
     const sessionName = sessionTitle || 'Sesión de trabajo';
     const idStr = sessionId || 'nueva';
@@ -444,125 +445,14 @@ export class TUI {
       todos: todos || [],
     });
 
-    DualPane.renderSplitFrame();
+    DualPane.renderFullScreen(session);
   }
 
   /**
    * Renderiza el historial previo de turnos al reanudar una sesión
    */
-  /**
-   * Renderiza el historial previo de turnos al reanudar una sesión con formato amplio y legible
-   */
-  public static renderSessionHistory(session: { id: string; title: string; workdir?: string; turns: Array<{ prompt: string; thought?: string; summary?: string; timestamp?: string; actions?: Array<{ type: string; details?: Record<string, unknown> }> }> }): void {
-    if (!session.turns || session.turns.length === 0) return;
-
-    const workdir = session.workdir || process.cwd();
-    const cleanPath = (rawPath: string): string => {
-      if (!rawPath) return '';
-      try {
-        const normRaw = rawPath.replace(/\\/g, '/');
-        const normWd = workdir.replace(/\\/g, '/');
-        if (normRaw.toLowerCase().startsWith(normWd.toLowerCase())) {
-          const rel = normRaw.slice(normWd.length).replace(/^\/+/, '');
-          return rel || '.';
-        }
-        return path.relative(workdir, rawPath).replace(/\\/g, '/') || rawPath;
-      } catch {
-        return rawPath;
-      }
-    };
-
-    const cleanCommand = (cmd: string): string => {
-      if (!cmd) return '';
-      return cmd.replace(/^cd\s+["']?[^&"']+["']?\s*&&\s*/i, '').trim();
-    };
-
-    const totalCols = process.stdout.columns || 110;
-    const dividerWidth = Math.min(totalCols - 4, 94);
-
-    console.log();
-    console.log(`  ${pc.bold(pc.cyan('📜 Historial previo de la sesión'))} ${pc.white(`"${session.title}"`)} ${pc.dim(`(#${session.id.slice(0, 8)} • ${session.turns.length} turno${session.turns.length > 1 ? 's' : ''})`)}`);
-    console.log(`  ${pc.gray('─'.repeat(dividerWidth))}`);
-
-    session.turns.forEach((turn, idx) => {
-      const time = turn.timestamp ? turn.timestamp.substring(11, 16) : '';
-      const turnHeader = `Turno ${idx + 1}${time ? ` (${time})` : ''}`;
-      
-      console.log(`\n  ${pc.bold(pc.blue('┌─'))} ${pc.bold(pc.white(turnHeader))} ${pc.gray('─'.repeat(Math.max(10, dividerWidth - turnHeader.length - 7)))}`);
-      
-      // Prompt del usuario
-      console.log(`  ${pc.blue('│')}  ${pc.bold(pc.cyan('👤 user ❯'))} ${pc.white(pc.bold(turn.prompt))}`);
-
-      // Pensamiento / Razonamiento
-      if (turn.thought && turn.thought.trim()) {
-        console.log(`  ${pc.blue('│')}`);
-        console.log(`  ${pc.blue('│')}  ${pc.yellow('💭 Razonamiento:')}`);
-        const thoughtLines = turn.thought.trim().split('\n').filter(Boolean);
-        const preview = thoughtLines.slice(0, 4).map(l => l.length > 85 ? l.slice(0, 82) + '...' : l);
-        if (thoughtLines.length > 4) preview.push('...');
-        for (const line of preview) {
-          console.log(`  ${pc.blue('│')}     ${pc.dim(line)}`);
-        }
-      }
-
-      // Acciones ejecutadas en el turno
-      if (turn.actions && turn.actions.length > 0) {
-        console.log(`  ${pc.blue('│')}`);
-        console.log(`  ${pc.blue('│')}  ${pc.magenta('⚡ Acciones ejecutadas:')}`);
-        for (const act of turn.actions) {
-          switch (act.type) {
-            case 'read_file':
-              console.log(`  ${pc.blue('│')}     ${pc.dim('•')} ${pc.dim('Read')} ${pc.cyan(cleanPath(String(act.details?.path || '')))}`);
-              break;
-            case 'write_file':
-              console.log(`  ${pc.blue('│')}     ${pc.green('•')} ${pc.green('Write')} ${pc.white(cleanPath(String(act.details?.path || '')))}`);
-              break;
-            case 'list_directory':
-            case 'glob':
-              console.log(`  ${pc.blue('│')}     ${pc.yellow('•')} ${pc.yellow('Glob')} ${pc.dim(`"${act.details?.path || act.details?.pattern || '.'}"`)}`);
-              break;
-            case 'run_command':
-              console.log(`  ${pc.blue('│')}     ${pc.white('•')} ${pc.bold(pc.white('$'))} ${pc.white(cleanCommand(String(act.details?.command || '')))}`);
-              break;
-            case 'eval_code':
-              console.log(`  ${pc.blue('│')}     ${pc.cyan('•')} ${pc.cyan('Test Sandbox')} ${pc.dim('(eval_code)')}`);
-              break;
-            case 'auto_test':
-              console.log(`  ${pc.blue('│')}     ${pc.green('•')} ${pc.green('Test Runner')} ${pc.dim('(auto_test)')}`);
-              break;
-            case 'codegraph':
-              console.log(`  ${pc.blue('│')}     ${pc.cyan('•')} ${pc.cyan('CodeGraph')} ${pc.dim(String(act.details?.symbol || act.details?.query || 'AST'))}`);
-              break;
-            case 'delegate_task':
-              console.log(`  ${pc.blue('│')}     ${pc.magenta('•')} ${pc.magenta(`Delegó a ${String(act.details?.agent || '').toUpperCase()}`)}`);
-              break;
-            case 'finish':
-              break;
-            default:
-              console.log(`  ${pc.blue('│')}     ${pc.dim('•')} ${pc.white(act.type)}`);
-              break;
-          }
-        }
-      }
-
-      // Resumen final de lo completado
-      if (turn.summary && turn.summary.trim()) {
-        console.log(`  ${pc.blue('│')}`);
-        console.log(`  ${pc.blue('│')}  ${pc.green('✓ Resumen:')}`);
-        const summaryLines = turn.summary.trim().split('\n');
-        for (const sLine of summaryLines) {
-          console.log(`  ${pc.blue('│')}     ${pc.white(sLine)}`);
-        }
-      }
-
-      console.log(`  ${pc.blue('└─')}${pc.gray('─'.repeat(dividerWidth - 2))}`);
-    });
-
-    console.log();
-    console.log(`  ${pc.gray('─'.repeat(dividerWidth))}`);
-    console.log(`  ${pc.dim('Puedes continuar conversando y enviando instrucciones abajo:')}`);
-    console.log(`  ${pc.gray('─'.repeat(dividerWidth))}`);
-    console.log();
+  public static renderSessionHistory(session: any): void {
+    DualPane.renderFullScreen(session);
   }
 
   public static getPromptPrefix(leaderName = 'barhel'): string {

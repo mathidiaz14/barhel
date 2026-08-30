@@ -1,4 +1,5 @@
 import { TodoItem } from '../types/actions.js';
+import { ChatSession } from '../utils/history.js';
 export interface SessionDashboardState {
     title: string;
     sessionId: string;
@@ -30,6 +31,10 @@ export declare function visualLength(str: string): number;
  * Rellena un string con espacios a la derecha hasta alcanzar el ancho visual deseado
  */
 export declare function padRightVisual(str: string, targetWidth: number): string;
+/**
+ * Divide un texto en líneas que respeten el ancho máximo visual
+ */
+export declare function wrapTextVisual(text: string, maxWidth: number): string[];
 export declare class DualPane {
     private static state;
     static updateState(partial: Partial<SessionDashboardState>): void;
@@ -41,7 +46,7 @@ export declare class DualPane {
     /**
      * Genera el bloque del Banner Superior Izquierdo (ASCII + Subtítulo + Hints)
      */
-    static buildLeftHeaderLines(): string[];
+    static buildLeftHeaderLines(maxWidth?: number): string[];
     /**
      * Genera las 3 Cajas del Panel Lateral Derecho
      * Caja 1: Metadatos de Sesión y Workspace
@@ -50,11 +55,15 @@ export declare class DualPane {
      */
     static buildRightSidebarLines(boxWidth?: number): string[];
     /**
-     * Renderiza el marco inicial de pantalla dividida (Header Izquierdo + Sidebar Derecha de 3 Cajas)
+     * Construye las líneas formateadas de los turnos previos de la sesión para el panel izquierdo
+     */
+    static buildChatHistoryLines(session: ChatSession, maxChatWidth?: number): string[];
+    /**
+     * Renderiza la pantalla completa en Split-Screen permanente (Header + Chat a la izquierda, 3 Cajas a la derecha)
+     */
+    static renderFullScreen(session?: ChatSession): void;
+    /**
+     * Renderiza el marco inicial de pantalla dividida
      */
     static renderSplitFrame(leftCustomLines?: string[]): void;
-    /**
-     * Renderiza únicamente la Sidebar lateral derecha completa con sus 3 cajas
-     */
-    static renderRightSidebar(): void;
 }
