@@ -1,88 +1,63 @@
 # 🤖 Barhel
 
-> **Asistente de codificación CLI conversacional e interactivo** (estilo OpenCode / Claude Code) para programar directamente desde tu terminal en cualquier carpeta, impulsado por las interfaces web de **DeepSeek**, **ChatGPT** y **Gemini** mediante **Playwright**, sin costo de APIs de pago.
+> **Asistente de codificación conversacional y autónomo multi-modelo para la terminal** (estilo Claude Code / OpenCode). Permite programar directamente en cualquier carpeta, orquestando y delegando tareas en paralelo a través de las interfaces web de **Claude**, **DeepSeek**, **ChatGPT**, **Gemini**, **Qwen**, **Mistral** y **Perplexity** mediante **Playwright**, **sin necesidad de APIs de pago**.
 
 ```text
-    ____             __          __
-   / __ )____ ______/ /_  ___   / /
-  / __  / __ `/ ___/ __ \/ _ \ / / 
- / /_/ / /_/ / /  / / / /  __// /  
-/_____/\__,_/_/  /_/ /_/\___//_/   
-  Autonomous CLI Coding Assistant (Claude Code & OpenCode Style)
-
-📁 Workspace: mi-proyecto (/home/user/proyectos/mi-proyecto)
-🛡️  Mode:      SAFE MODE (usa /auto para cambiar)
-🤖 Leader:    DeepSeek | Workers: ChatGPT & Gemini
-💡 Ayuda:     Escribe tu prompt o usa /help para comandos
-════════════════════════════════════════════════════════════════
+    ____             __          __     │  Session   : Refactorización API Auth (#4f91a82c)
+   / __ )____ ______/ /_  ___   / /     │  Workspace : mi-proyecto (C:\proyectos\mi-proyecto:main)
+  / __  / __ `/ ___/ __ \/ _ \ / /      │  Leader    : DeepSeek Chat (V3 / R1) (Inactivo)
+ / /_/ / /_/ / /  / / / /  __// /       │  Workers   : claude, chatgpt, gemini, qwen
+/_____/\__,_/_/  /_/ /_/\___//_/        │  Mode      : autonomous (/auto to toggle)
+Autonomous Multi-Model Coding Agent     │  Version   : Barhel 1.0.0
+──────────────────────────────────────────────────────────────────────────────────────────────
+Type / for command palette • /workers for analysis • /graph for AST • Tab to complete
+──────────────────────────────────────────────────────────────────────────────────────────────
 barhel ❯ 
 ```
 
 ---
 
-## ⚡ Instalación Global (Para usar `barhel` en cualquier carpeta)
+## 🌟 Características Principales
 
-### Opción A: Instalación directa con NPM (Recomendado)
+- 💸 **100% Gratuito (Zero API Cost):** Utiliza sesiones web autenticadas y persistentes mediante navegadores Chromium automatizados.
+- 👑 **Orquestación Multi-Modelo:** Un modelo **Líder** (ej. DeepSeek R1 o Claude) analiza el repositorio y delega subtareas en paralelo a **Workers secundarios** (ChatGPT, Gemini, Qwen, Mistral).
+- 🧪 **Motor de Auto-Pruebas y Verificación Autónoma:** Sandbox aislado (`eval_code`) para ejecutar assertions y runner inteligente de tests (`auto_test`, `/test`) con mandato de verificación antes de finalizar.
+- 🕸️ **CodeGraph AST en Memoria:** Indexación instantánea de clases, funciones, métodos y dependencias cruzadas (`Callers` & `Callees`) en milisegundos (`/graph`).
+- 📥 **Sistema de Skills estilo Claude Code:** Instala habilidades y reglas de arquitectura directamente desde URLs de GitHub (`/skill install <url>`).
+- 📊 **Supervisor de Agentes y Progreso en Tiempo Real:** Métrica de avance porcentual (`0-100%`) para el Líder y Workers (`/progress`).
+- 🤖 **Daemon en Segundo Plano y Bot de Telegram:** Deja a Barhel trabajando como servicio y conversa con él o recibe notificaciones al terminar tus tareas desde Telegram (`/telegram`, `/daemon`).
+- 📜 **Historial y Memoria Visual de Sesiones:** Tarjetas legibles por turno, recuperación automática de contexto y navegación de prompts con flechas `↑` y `↓`.
+- 🔒 **Seguridad y Cifrado Militar:** Validación contra path traversal, políticas de comandos allowlist/denylist y cifrado de sesiones con **AES-256-GCM** (`BARHEL_SECRET`).
+
+---
+
+## ⚡ Instalación
+
+### Opción A: Instalación Global (Recomendado)
 ```bash
-npm install -g github:mathidiaz14/barhel
+sudo npm install -g github:mathidiaz14/barhel
 ```
 
-> **Nota:** Barhel usa **Playwright** para controlar el navegador. Asegúrate de tener el navegador Chromium instalado:
+> **Importante:** Barhel utiliza Playwright para controlar los navegadores. Asegúrate de instalar Chromium:
 > ```bash
 > npx playwright install chromium
 > ```
 
-### Opción B: Instalación local para desarrollo
+### Opción B: Instalación Local para Desarrollo
 ```bash
-git clone <url-del-repo>
+git clone https://github.com/mathidiaz14/barhel.git
 cd barhel
 npm install
-npm run browsers   # instala el Chromium de Playwright
-npm run build
-npm link
+npm run browsers   # Instala el navegador Chromium
+npm run build      # Compila TypeScript
+npm link           # Enlaza el comando global barhel
 ```
 
 ---
 
-## ⚙️ Configuración de Modelos (`barhel config`)
+## 🔑 Primer Paso: Autenticación (`barhel login`)
 
-Barhel te permite elegir cualquier plataforma web de IA como **Agente Líder (Orquestador principal)** y activar múltiples **Workers de soporte**:
-
-```bash
-barhel config
-```
-
-### 🌐 Proveedores Web Compatibles:
-- 👑/👥 **Claude (Sonnet 3.5 / 3.7)** (`claude.ai`)
-- 👑/👥 **DeepSeek (V3 / R1)** (`chat.deepseek.com`)
-- 👑/👥 **ChatGPT (GPT-4o / o1)** (`chatgpt.com`)
-- 👑/👥 **Gemini (Flash 2.0 / Pro)** (`gemini.google.com`)
-- 👑/👥 **Qwen Chat (Qwen 2.5 Coder)** (`chat.qwen.ai`)
-- 👑/👥 **Mistral Le Chat (Codestral)** (`chat.mistral.ai`)
-- 👥 **Perplexity AI** (`perplexity.ai`)
-
-### Configuración avanzada (`~/.dev-agent-sessions/config.json`)
-Además de `leader`/`workers`, puedes editar a mano:
-
-| Campo | Descripción |
-| :--- | :--- |
-| `autonomousDefault` | Arrancar en modo autónomo (`true`/`false`) |
-| `maxIterations` | Límite de pasos ReAct por instrucción |
-| `commandPolicies.deny` | Regex de comandos **siempre bloqueados** (ej. `["rm -rf", "mkfs"]`) |
-| `commandPolicies.allow` | Regex de comandos que **no piden confirmación** (ej. `["^npm test$"]`) |
-| `fallbackOrder` | Proveedores de respaldo del Líder (ej. `["chatgpt", "gemini"]`) |
-| `autoSummarize` | Generar resumen de memoria al cerrar (default `true`) |
-| `autoCommit` | Commit automático al terminar en modo autónomo (default `false`) |
-
-> 🛡️ **Denylist por defecto:** comandos como `rm -rf`, `mkfs`, `> /dev/sd*`, `curl|sh`, `shutdown`, `git push --force` están bloqueados incluso en modo autónomo.
-
-> 👥 **Fallback de líder:** si el proveedor primario falla 2 veces seguidas, Barhel cambia automáticamente a `fallbackOrder` (nuevo hilo web para ese proveedor).
-
----
-
-## 🔑 Primer Paso: Autenticación (`login`)
-
-Inicia sesión en las interfaces web de los modelos que vayas a utilizar:
+Inicia sesión una sola vez en las plataformas web que vayas a utilizar:
 
 ```bash
 # Iniciar sesión en un proveedor específico:
@@ -94,193 +69,230 @@ barhel login qwen
 barhel login mistral
 barhel login perplexity
 
-# O en todos los disponibles:
+# O en todos los proveedores secuencialmente:
 barhel login all
 ```
 
-> **Nota:** Se abrirá el navegador Chromium persistente. Inicia sesión en la plataforma y pulsa **Enter** en tu terminal para guardar las cookies y almacenamiento en `~/.dev-agent-sessions/`.
+> **¿Cómo funciona?** Se abrirá una ventana de Chromium. Inicia sesión en la plataforma y pulsa **Enter** en tu terminal. Las cookies y el almacenamiento de sesión se guardarán de forma segura en `~/.dev-agent-sessions/`.
 
 ---
 
----
+## ⚙️ Configuración de Modelos (`barhel config`)
 
-## 💾 Gestión de Sesiones y Memoria Web
+Configura qué modelo actuará como Líder y qué Workers estarán disponibles para delegar:
 
-Barhel guarda automáticamente cada sesión en tu máquina y la vincula al **hilo de chat único (`chatUrl`) en la interfaz web del LLM**. Así, el modelo recuerda todo lo que hicieron juntos.
-
-### Reanudar una sesión anterior:
 ```bash
-# Abre el selector visual con la lista de tus sesiones, carpetas y títulos:
-barhel resume
-
-# O directamente por ID:
-barhel resume <sessionId>
+barhel config
 ```
 
-### Ver el historial de sesiones guardadas:
-```bash
-barhel history
-```
-
-### Exportar una sesión:
-```bash
-barhel export <sessionId>                # Markdown (default)
-barhel export <sessionId> --format json  # JSON crudo
-barhel export <sessionId> --out ./docs/  # carpeta de salida
-```
-
-### Copia de seguridad y Migración Completa (backup/restore):
-Si deseas migrar todas tus sesiones de autenticación (cookies) e historiales de chat completos a otra computadora, puedes exportar e importar el directorio de sesiones completo:
-```bash
-# Exportar sesiones e historial a un archivo comprimido (.tar.gz):
-barhel backup
-# (O especificando un nombre personalizado)
-barhel backup mi-copia.tar.gz
-
-# Restaurar e importar en la nueva computadora:
-barhel restore barhel-backup-2026-08-29.tar.gz
-```
-
-### Memoría a largo plazo
-Al cerrar (`finish` o `Ctrl+C`), Barhel resume automáticamente los turnos nuevos con el Líder y guarda el resumen en la sesión. Al reanudar, ese resumen se reinyecta como contexto (configurable con `autoSummarize` en `config.json`). Puedes generarlo manualmente con `/summarize`.
-
-### Diagnóstico de proveedores (`barhel doctor`)
-Verifica que los selectores de UI de cada proveedor sigan presentes (detecta cambios de interfaz que rompan los drivers):
-```bash
-barhel doctor
-barhel doctor --provider deepseek
-```
-
-### Cifrar las sesiones guardadas (`BARHEL_SECRET`)
-Define la variable de entorno `BARHEL_SECRET` para guardar las sesiones del historial cifradas con **AES-256-GCM** (archivos `.json.enc`). Sin la variable, se guardan en claro como antes.
-```bash
-# Windows (PowerShell)
-$env:BARHEL_SECRET = "mi-clave-secreta"
-
-# Linux/macOS
-export BARHEL_SECRET="mi-clave-secreta"
-```
-> ⚠️ Si rotas `BARHEL_SECRET`, las sesiones `.json.enc` existentes dejarán de poder leerse. `/status` avisa si hay sesiones cifradas sin clave.
+### 🌐 Proveedores Web Soportados:
+| Proveedor | Rol Principal | Modelo / Versión |
+| :--- | :--- | :--- |
+| 👑/👥 **Claude** | Líder / Worker | Claude 3.5 Sonnet / Claude 3.7 |
+| 👑/👥 **DeepSeek** | Líder / Worker | DeepSeek Chat V3 / DeepSeek R1 |
+| 👑/👥 **ChatGPT** | Líder / Worker | GPT-4o / o1 / o3-mini |
+| 👑/👥 **Gemini** | Líder / Worker | Gemini 2.0 Flash / Pro / Thinking |
+| 👑/👥 **Qwen** | Líder / Worker | Qwen 2.5 Coder 32B |
+| 👑/👥 **Mistral** | Líder / Worker | Codestral / Mistral Large |
+| 👥 **Perplexity** | Worker | Sonar / Online Research |
 
 ---
 
-## 🚀 Cómo Usar Barhel
+## 🚀 Uso de Barhel
 
-### 1. Iniciar la CLI Interactiva de Chat en tu Carpeta
-Entra a cualquier proyecto en tu terminal y escribe simplemente:
+### 1. Iniciar la CLI Interactiva en tu Proyecto
+Navega a cualquier repositorio o carpeta y ejecuta:
 
 ```bash
-cd /ruta/a/tu/proyecto
+cd /ruta/a/mi-proyecto
 barhel
 ```
 
-### 2. Slash Commands Disponibles en el Chat
+Al abrirse, Barhel cargará automáticamente la última sesión del proyecto, mostrará el transcript de turnos previos en tarjetas legibles y te permitirá continuar la conversación.
 
-Durante tu conversación en Barhel, puedes usar comandos especiales con `/`:
-
-| Comando | Descripción |
-| :--- | :--- |
-| `/help` | Muestra la lista de comandos disponibles |
-| `/test [filtro]` | 🧪 **Auto-Pruebas:** Ejecuta el runner de pruebas del proyecto o verifica el código modificado |
-| `/graph [simbolo]` | 🕸️ **CodeGraph en Memoria:** Muestra el grafo de arquitectura AST, funciones, clases y relaciones de llamadas en milisegundos (alias: `/codegraph`) |
-| `/skills` | ⚡ **Lista de Skills:** Muestra las habilidades instaladas al estilo Claude Code |
-| `/skill install <url>` | 📥 **Instalar Skill:** Descarga e instala automáticamente una skill desde GitHub/URL |
-| `/progress` o `/supervise` | 📊 **Supervisión de Agentes:** Muestra el porcentaje de avance (%) en tiempo real del Líder y Workers |
-| `/telegram [token]` | 🤖 **Telegram Bot Bridge:** Conecta Barhel con tu bot de Telegram para control y notificaciones |
-| `/daemon [start\|stop\|status]` | ⚙️ **Modo Segundo Plano:** Controla el proceso de Barhel ejecutándose como daemon |
-| `/workers` o `/analysis` | 🔍 **Inspector de Workers:** Abre el modal interactivo para leer el análisis y razonamiento completo de los agentes secundarios |
-| `/think` o `/thinking` | 💭 **Modo de Razonamiento:** Alterna entre el bloque visual completo estilo Claude Code o una sola línea compacta |
-| `/resume` o `/history` | Abre el selector visual para saltar a una sesión anterior con todo su contexto |
-| `/new [título]` | Inicia una nueva sesión limpia y abre un chat nuevo en el LLM web |
-| `/title <texto>` | Renombra el título descriptivo de la sesión actual |
-| `/sessions` o `/list` | Muestra el listado de sesiones recientes guardadas en el disco |
-| `/config` o `/models` | Cambia interactivamente el modelo Líder y Workers al vuelo |
-| `/leader <id>` | Cambia el modelo Líder manualmente (deepseek, claude, chatgpt, gemini, ...) |
-| `/auto` | Alterna entre **Modo Autónomo** (sin confirmaciones) y **Modo Seguro** (`[y/N]`) |
-| `/plan` | Alterna **Modo PLAN ONLY**: el lider simula escrituras/comandos sin aplicarlos |
-| `/commit [mensaje]` | Hace `git add -A` + `git commit` de los cambios del workspace |
-| `/review` | Muestra `git status` + `git diff` del workspace |
-| `/explain <tema>` | Pide al Líder que explique un símbolo/archivo sin modificar nada |
-| `/fix [error]` | Pide al Líder que ejecute `check` y corrija los errores de tipo/lint |
-| `/summarize` | Genera el resumen de memoria de la sesión (memoria a largo plazo) |
-| `/export [json|md]` | Exporta la sesión actual a Markdown o JSON |
-| `/backup [archivo]` | Exporta todas las sesiones de autenticación e historial a un archivo `.tar.gz` |
-| `/restore <archivo>` | Importa sesiones de autenticación e historial desde un archivo `.tar.gz` |
-| `/status` | Comprueba el estado de las credenciales web guardadas |
-| `/login [proveedor]` | Inicia sesión en cualquier proveedor sin salir del chat |
-| `/clear` | Limpia la pantalla de la terminal |
-| `/exit` o `/quit` | Guarda y cierra la sesión de Barhel de forma ordenada |
-
----
-
-## 🛠️ Ejecución Directa de Instrucciones (Modo Non-Interactive)
-
-Si prefieres ejecutar una tarea directa desde scripts o terminal sin entrar al chat interactivo:
+### 2. Ejecución Directa de Instrucciones (Non-Interactive)
+Para tareas rápidas sin entrar al chat interactivo:
 
 ```bash
-# Modo seguro (pregunta confirmación interactiva antes de escribir o ejecutar)
+# Modo seguro (solicita confirmación antes de modificar archivos o ejecutar comandos)
 barhel "Inspecciona el proyecto y añade TypeScript con tsconfig.json"
 
-# Modo 100% autónomo (-a)
+# Modo 100% Autónomo (-a)
 barhel -a "Crea una suite de pruebas unitarias con Vitest y ejecútalas"
 
-# Modo PLAN ONLY: simula los cambios y termina con el plan (sin modificar archivos)
+# Modo PLAN ONLY (--plan): simula los pasos sin aplicar cambios en disco
 barhel --plan "Refactoriza el módulo de autenticación"
 
 # Notificación sonora al terminar
-barhel --notify -a "Ejecuta los tests del proyecto"
-
-# Opciones adicionales
-barhel --headless -a -w "./otro-proyecto" "Refactoriza el módulo de autenticación"
+barhel --notify -a "Ejecuta los tests del proyecto y soluciona cualquier error"
 ```
 
 ---
 
-## 📁 Estructura del Código Fuente
+## 🧰 Módulos y Capacidades Avanzadas
+
+### 🧪 1. Motor de Auto-Pruebas y Verificación (`eval_code` / `/test`)
+Barhel tiene la regla estricta de **probar lo que programa antes de dar la tarea por finalizada**:
+- **Sandbox Aislado (`eval_code`):** El modelo escribe snippets temporales en TypeScript/Node/Python/PHP con assertions para validar sus funciones sin ensuciar tu repositorio.
+- **Project Test Runner (`auto_test` / `/test`):** Detecta automáticamente frameworks como Vitest, Jest, PyTest, PHPUnit o Node Test Runner y ejecuta las pruebas de los archivos modificados.
+- **Comando manual:** Escribe `/test` en el chat para correr la suite en cualquier momento.
+
+### 🕸️ 2. CodeGraph AST en Memoria (`/graph`)
+Analiza el árbol sintáctico (AST) del proyecto para consultar al instante la jerarquía de clases, métodos, funciones y relaciones de llamadas (`Callers` & `Callees`) sin gastar tokens leyendo archivos completos:
+```bash
+# Desde la terminal:
+barhel graph
+barhel graph Orchestrator
+
+# Dentro del chat interactivo:
+/graph
+/graph AuthService
+```
+
+### 📥 3. Sistema de Skills estilo Claude Code (`/skill`)
+Descarga e instala metodologías o guías de arquitectura desde cualquier URL o repositorio:
+```text
+/skill install https://raw.githubusercontent.com/usuario/mi-repo/main/SKILL.md
+/skills
+```
+
+### 🤖 4. Background Daemon y Telegram Bot (`/daemon` / `/telegram`)
+Permite dejar al agente corriendo en segundo plano 24/7 y controlarlo desde Telegram:
+- **Iniciar daemon:** `barhel daemon start` o `/daemon start`.
+- **Conectar Telegram:** `barhel telegram <token>` o `/telegram <token>`.
+- **Notificaciones automáticas:** Te envía un mensaje a Telegram cuando termina una tarea larga con el resumen de cambios.
+
+### 📊 5. Supervisión de Agentes y Avance en Vivo (`/progress`)
+Supervisa en tiempo real el porcentaje (`0-100%`) y estado de las subtareas (`todos`) asignadas tanto al Líder como a los Workers secundarios:
+```text
+/progress
+/supervise
+```
+
+---
+
+## ⌨️ Tabla de Comandos Slash en el Chat
+
+| Comando | Descripción |
+| :--- | :--- |
+| `/help` | Muestra la ayuda y lista de comandos |
+| `/test [filtro]` | 🧪 **Auto-Pruebas:** Ejecuta el runner de pruebas del proyecto o un archivo de test |
+| `/graph [simbolo]` | 🕸️ **CodeGraph AST:** Muestra el mapa de arquitectura o inspecciona funciones y quién las llama (alias: `/codegraph`) |
+| `/skills` | ⚡ **Lista de Skills:** Muestra las habilidades y metodologías instaladas |
+| `/skill install <url>` | 📥 **Instalar Skill:** Descarga e instala una skill desde GitHub o URL directa |
+| `/progress` o `/supervise` | 📊 **Supervisión:** Muestra el porcentaje de avance (%) en vivo del Líder y Workers |
+| `/telegram [token]` | 🤖 **Telegram Bot:** Configura o conecta el bot de Telegram |
+| `/daemon [start\|stop\|status]`| ⚙️ **Modo Segundo Plano:** Controla el proceso de Barhel ejecutándose como daemon |
+| `/workers` o `/analysis` | 🔍 **Inspector de Workers:** Abre el modal interactivo con los análisis de los modelos secundarios |
+| `/think` o `/thinking` | 💭 **Modo de Razonamiento:** Alterna entre razonamiento extendido o resumen compacto |
+| `/resume` o `/history` | Abre el selector visual para reanudar una sesión anterior |
+| `/new [título]` | Inicia una sesión limpia con nuevo chat en el navegador |
+| `/title <texto>` | Renombra el título de la sesión actual |
+| `/sessions` o `/list` | Lista las sesiones guardadas en disco |
+| `/config` o `/models` | Configura el modelo Líder y Workers en caliente |
+| `/leader <id>` | Cambia el modelo Líder rápidamente (deepseek, claude, chatgpt, gemini...) |
+| `/auto` | Alterna entre **Modo Autónomo** (sin confirmación) y **Modo Seguro** (`[y/N]`) |
+| `/plan` | Alterna **Modo PLAN ONLY** (simula acciones sin modificar archivos) |
+| `/commit [mensaje]` | Realiza `git add -A` + `git commit` automático |
+| `/review` | Muestra `git status` y el `git diff` coloreado del proyecto |
+| `/explain <tema>` | Pide al Líder que explique un archivo o símbolo sin modificar nada |
+| `/fix [error]` | Ejecuta `check` y repara automáticamente errores de compilación y linters |
+| `/summarize` | Genera y almacena el resumen de memoria a largo plazo |
+| `/export [json\|md]` | Exporta la sesión a Markdown o JSON |
+| `/backup [archivo]` | Exporta todas las credenciales web e historial a un `.tar.gz` |
+| `/restore <archivo>` | Importa credenciales e historial desde un archivo `.tar.gz` |
+| `/status` | Comprueba el estado de las credenciales de cada proveedor |
+| `/login [proveedor]` | Inicia sesión en un proveedor web sin salir del chat |
+| `/clear` | Limpia la pantalla de la terminal |
+| `/exit` o `/quit` | Guarda y cierra la sesión de Barhel |
+
+---
+
+## 🔒 Seguridad y Configuración Avanzada
+
+### Cifrado Militar de Sesiones (`BARHEL_SECRET`)
+Puedes proteger todas tus sesiones guardadas activando el cifrado **AES-256-GCM**:
+```bash
+# Linux/macOS
+export BARHEL_SECRET="tu-clave-super-secreta"
+
+# Windows (PowerShell)
+$env:BARHEL_SECRET = "tu-clave-super-secreta"
+```
+
+### Configuración en `~/.dev-agent-sessions/config.json`:
+```json
+{
+  "leader": "deepseek",
+  "workers": ["claude", "chatgpt", "gemini", "qwen"],
+  "autonomousDefault": false,
+  "maxIterations": 25,
+  "commandPolicies": {
+    "deny": ["rm\\s+-(?:rf|r\\s+f|f\\s+r|fr)\\b", "git\\s+push\\s+--force"],
+    "allow": ["^npm test$", "^git status$"]
+  },
+  "fallbackOrder": ["chatgpt", "gemini"],
+  "autoSummarize": true,
+  "autoCommit": false
+}
+```
+
+---
+
+## 📁 Arquitectura del Proyecto
 
 ```text
 barhel/
-├── package.json               # Dependencias (Playwright, Commander, Picocolors, Ora, Inquirer)
-├── tsconfig.json              # Configuración TypeScript ESM / NodeNext
 ├── bin/
-│   └── run.ts                 # Entrypoint del ejecutable 'barhel' (CLI Commander)
+│   └── run.ts                 # CLI principal Commander (barhel, graph, skill, daemon, telegram)
 ├── src/
 │   ├── cli/
-│   │   ├── repl.ts            # Módulo de Chat Interactivo REPL y slash commands
-│   │   └── tui.ts             # Renderizado estilo OpenCode/Claude Code (banner, spinner, inspector)
-│   ├── types/
-│   │   ├── actions.ts         # Tipos e interfaces ReAct y herramientas
-│   │   └── providers.ts       # Enum de proveedores y configuración de selectores
+│   │   ├── repl.ts            # Bucle interactivo REPL, autocompletado y slash commands
+│   │   ├── tui.ts             # Interfaz visual de terminal, banner dividido y tarjetas de turnos
+│   │   ├── DualPane.ts        # Dashboard dividido de métricas, estado y git branch
+│   │   └── commandPalette.ts  # Paleta interactiva de comandos al escribir '/'
+│   ├── codegraph/
+│   │   └── CodeGraphEngine.ts # Motor AST TypeScript/JavaScript y resolución de Callers/Callees
+│   ├── daemon/
+│   │   ├── DaemonManager.ts   # Gestor de procesos en segundo plano con PID
+│   │   └── TelegramBot.ts     # Bridge con Telegram Bot API vía long-polling nativo
+│   ├── testing/
+│   │   └── TestSandbox.ts     # Sandbox aislado (eval_code) y runner de tests del proyecto
+│   ├── skills/
+│   │   └── SkillManager.ts    # Gestor de Skills, parsing YAML frontmatter e inyección de prompts
 │   ├── drivers/
-│   │   ├── BaseDriver.ts      # Contexto persistente, ciclo de vida y anti-detección
-│   │   ├── DriverFactory.ts   # Registro de proveedores disponibles
+│   │   ├── BaseDriver.ts      # Contexto persistente de Chromium, evasión y selectores
 │   │   ├── DeepSeekDriver.ts  # Driver web para DeepSeek Chat (Líder)
+│   │   ├── ClaudeDriver.ts    # Driver web para Claude (Líder/Worker)
 │   │   ├── ChatGPTDriver.ts   # Driver web para ChatGPT (Worker)
 │   │   ├── GeminiDriver.ts    # Driver web para Gemini (Worker)
-│   │   ├── ClaudeDriver.ts    # Driver web para Claude
-│   │   ├── QwenDriver.ts      # Driver web para Qwen Chat
-│   │   ├── MistralDriver.ts   # Driver web para Mistral Le Chat
-│   │   └── PerplexityDriver.ts# Driver web para Perplexity AI
+│   │   ├── QwenDriver.ts      # Driver web para Qwen Chat (Worker)
+│   │   ├── MistralDriver.ts   # Driver web para Mistral Le Chat (Worker)
+│   │   └── PerplexityDriver.ts# Driver web para Perplexity AI (Worker)
 │   ├── engine/
-│   │   ├── ToolEngine.ts      # Herramientas FS/terminal (read/write/list/grep/glob/check), plan-only, políticas de comandos, diff preview
-│   │   ├── ResponseParser.ts  # Extractor y validador resiliente de JSON (incluye delegate_batch)
-│   │   └── Orchestrator.ts    # Loop ReAct multi-turno, worker paralelos, fallback de líder, memoria a largo plazo, auto-commit
+│   │   ├── Orchestrator.ts    # Bucle ReAct multi-agente, memoria y auto-delegación
+│   │   ├── ToolEngine.ts      # Ejecución de herramientas seguras, contención de rutas y diffs
+│   │   ├── ResponseParser.ts  # Parser JSON resiliente con vista previa de razonamiento en vivo
+│   │   └── ProgressSupervisor.ts # Métrica de porcentaje de avance y supervisión
 │   └── utils/
-│       ├── logger.ts          # Logs con colores y delegación de spinner
-│       ├── spinner.ts         # Spinner único compartido (evita spinners superpuestos)
-│       ├── config.ts          # Configuración persistente de modelos + políticas/fallback/automatización
-│       ├── history.ts         # Sesiones y turnos en ~/.dev-agent-sessions/history (cifrado AES-256-GCM opcional)
-│       ├── session.ts         # Rutas de perfiles de navegador por proveedor
-│       ├── crypto.ts          # Cifrado/descifrado AES-256-GCM con BARHEL_SECRET
-│       ├── git.ts             # Helpers git (status/diff/commit) con exec compartido
-│       ├── exec.ts            # Ejecutor de comandos promisificado (STDOUT/STDERR combinados)
-│       ├── version.ts         # Lectura de versión centralizada desde package.json
-│       └── workerStore.ts     # Analisis en memoria de los workers (inspector /workers)
-└── test/
-    ├── response-parser.test.ts # Tests de parsing/validación JSON (incluye grep/glob/check/delegate_batch)
-    ├── toolengine.test.ts      # Tests de contención de rutas, grep/glob, plan-only y políticas
-    ├── crypto.test.ts          # Tests de cifrado/descifrado AES-256-GCM
-    └── history.test.ts         # Tests de sesiones, cifrado en disco y export Markdown
+│       ├── history.ts         # Persistencia de sesiones y formateo de transcripciones
+│       ├── crypto.ts          # Cifrado/descifrado AES-256-GCM
+│       ├── config.ts          # Gestor de configuración persistente
+│       └── exec.ts            # Ejecutor seguro de subprocesos
+└── test/                      # Suite completa de 38 pruebas unitarias
 ```
 
-> **Nota:** Las herramientas del `ToolEngine` verifican que toda ruta (leer/escribir/explorar) permanezca dentro del `--workdir` actual, incluyendo defensa contra `..` y symlinks, incluso en modo autónomo.
+---
+
+## 🧪 Pruebas Unitarias
+
+Para ejecutar la suite completa de pruebas:
+```bash
+npm test
+```
+
+---
+
+## 📄 Licencia
+
+Distribuido bajo la Licencia **MIT**. Consulta `LICENSE` para más detalles.
