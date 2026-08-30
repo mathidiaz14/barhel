@@ -16,7 +16,9 @@ import { SkillManager } from '../skills/SkillManager.js';
 import { ProgressSupervisor } from '../engine/ProgressSupervisor.js';
 import { TelegramBot } from '../daemon/TelegramBot.js';
 import { DaemonManager } from '../daemon/DaemonManager.js';
+import { runDoctorDiagnostic } from './doctor.js';
 const AVAILABLE_SLASH_COMMANDS = [
+    { name: '/doctor', desc: 'Diagnóstico profundo de autenticación de sesión, Cloudflare y selectores UI', needsArg: 'Proveedor (opcional):', optionalArg: true },
     { name: '/test', desc: 'Ejecuta o genera pruebas unitarias automáticas para el proyecto', needsArg: 'Archivo o filtro (opcional):', optionalArg: true },
     { name: '/graph', desc: 'Mapa de arquitectura AST y búsqueda de símbolos en memoria', aliases: ['/codegraph'], needsArg: 'Símbolo o consulta (opcional):', optionalArg: true },
     { name: '/skills', desc: 'Lista las skills instaladas estilo Claude Code' },
@@ -268,6 +270,10 @@ export async function startInteractiveChat(options = {}) {
             case '/help':
                 logger.printHelp();
                 break;
+            case '/doctor': {
+                await runDoctorDiagnostic({ provider: arg || undefined });
+                break;
+            }
             case '/workers':
             case '/analysis':
             case '/inspect':

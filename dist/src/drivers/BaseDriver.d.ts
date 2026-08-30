@@ -65,6 +65,10 @@ export declare abstract class BaseDriver {
      */
     protected findFirstVisibleSelector(selectors: string[], timeoutMs?: number): Promise<string | null>;
     /**
+     * Diagnóstico exhaustivo de salud, autenticación y selectores de UI del proveedor
+     */
+    verifyHealth(testPing?: boolean): Promise<DriverHealthReport>;
+    /**
      * Verifica que los selectores clave del proveedor sigan presentes en la página.
      */
     verifyUI(): Promise<{
@@ -72,4 +76,23 @@ export declare abstract class BaseDriver {
         found: boolean;
         selector?: string;
     }[]>;
+}
+export interface DriverHealthReport {
+    providerId: string;
+    displayName: string;
+    url: string;
+    currentUrl?: string;
+    authenticated: boolean;
+    authReason?: string;
+    cloudflareBlocked: boolean;
+    inputSelectorFound: boolean;
+    inputSelector?: string;
+    sendButtonFound: boolean;
+    sendButtonSelector?: string;
+    responseContainerFound: boolean;
+    latencyMs: number;
+    pingSuccess?: boolean;
+    pingResponse?: string;
+    pingDurationMs?: number;
+    error?: string;
 }

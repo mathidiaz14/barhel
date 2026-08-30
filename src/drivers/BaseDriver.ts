@@ -541,6 +541,113 @@ export abstract class BaseDriver {
   }
 
   /**
+   * Diagnóstico exhaustivo de salud, autenticación y selectores de UI del proveedor
+   */
+  public async verifyHealth(testPing = false): Promise<DriverHealthReport> {
+    if (!this.page) {
+      return {
+        providerId: this.config.id,
+        displayName: this.config.displayName,
+        url: this.config.url,
+        authenticated: false,
+        authReason: 'Página no inicializada',
+        cloudflareBlocked: false,
+        inputSelectorFound: false,
+        sendButtonFound: false,
+        responseContainerFound: false,
+        latencyMs: 0,
+        error: 'El navegador no pudo ser iniciado.',
+      };
+    }
+
+    const start = performance.now();
+    try {
+      await this.ensureChatPage(undefined, false);
+      const latencyMs = Math.round(performance.now() - start);
+      const currentUrl = this.page.url();
+
+      const isLoginUrl =
+        currentUrl.includes('/login') ||
+        currentUrl.includes('/sign_in') ||
+        currentUrl.includes('/auth') ||
+        currentUrl.includes('/signin') ||
+        currentUrl.includes('accounts.google.com') ||
+        currentUrl.includes('auth0.openai.com');
+
+      const title = await this.page.title().catch(() => '');
+      const cfCount = await this.page
+        .locator('#challenge-running, #challenge-stage, #cf-turnstile, iframe[src*="cloudflare"]')
+        .count()
+        .catch(() => 0);
+      const cloudflareBlocked = title.toLowerCase().includes('just a moment') || cfCount > 0;
+
+      const inputSelector = await this.findFirstVisibleSelector(this.config.selectors.inputPrompt, 4000);
+      const sendButtonSelector = await this.findFirstVisibleSelector(this.config.selectors.sendButton, 1500);
+      const responseContainerSelector = await this.findFirstVisibleSelector(this.config.selectors.responseContainer, 1500);
+
+      const authenticated = !isLoginUrl && !cloudflareBlocked && inputSelector !== null;
+      let authReason: string | undefined;
+
+      if (!authenticated) {
+        if (cloudflareBlocked) {
+          authReason = 'Bloqueado por verificación Cloudflare / Anti-bot';
+        } else if (isLoginUrl) {
+          authReason = `Redirigido a pantalla de inicio de sesión (${currentUrl.slice(0, 45)}...)`;
+        } else if (!inputSelector) {
+          authReason = 'Campo de entrada no disponible (posible sesión expirada o modal invasivo)';
+        }
+      }
+
+      const report: DriverHealthReport = {
+        providerId: this.config.id,
+        displayName: this.config.displayName,
+        url: this.config.url,
+        currentUrl,
+        authenticated,
+        authReason,
+        cloudflareBlocked,
+        inputSelectorFound: inputSelector !== null,
+        inputSelector: inputSelector ?? undefined,
+        sendButtonFound: sendButtonSelector !== null,
+        sendButtonSelector: sendButtonSelector ?? undefined,
+        responseContainerFound: responseContainerSelector !== null,
+        latencyMs,
+      };
+
+      if (testPing && authenticated && inputSelector) {
+        const pingStart = performance.now();
+        try {
+          const pingResp = await this.sendMessage('Responde estrictamente la palabra "OK" para prueba de diagnóstico.');
+          report.pingDurationMs = Math.round(performance.now() - pingStart);
+          report.pingSuccess = pingResp.trim().length > 0;
+          report.pingResponse = pingResp.slice(0, 100);
+        } catch (pingErr) {
+          report.pingSuccess = false;
+          report.pingDurationMs = Math.round(performance.now() - pingStart);
+          report.error = pingErr instanceof Error ? pingErr.message : String(pingErr);
+        }
+      }
+
+      return report;
+    } catch (err) {
+      return {
+        providerId: this.config.id,
+        displayName: this.config.displayName,
+        url: this.config.url,
+        currentUrl: this.page.url(),
+        authenticated: false,
+        authReason: err instanceof Error ? err.message : String(err),
+        cloudflareBlocked: false,
+        inputSelectorFound: false,
+        sendButtonFound: false,
+        responseContainerFound: false,
+        latencyMs: Math.round(performance.now() - start),
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
+  /**
    * Verifica que los selectores clave del proveedor sigan presentes en la página.
    */
   public async verifyUI(): Promise<{ name: string; found: boolean; selector?: string }[]> {
@@ -559,4 +666,24 @@ export abstract class BaseDriver {
     }
     return results;
   }
+}
+
+export interface DriverHealthReport {
+  providerId: string;
+  displayName: string;
+  url: string;
+  currentUrl?: string;
+  authenticated: boolean;
+  authReason?: string;
+  cloudflareBlocked: boolean;
+  inputSelectorFound: boolean;
+  inputSelector?: string;
+  sendButtonFound: boolean;
+  sendButtonSelector?: string;
+  responseContainerFound: boolean;
+  latencyMs: number;
+  pingSuccess?: boolean;
+  pingResponse?: string;
+  pingDurationMs?: number;
+  error?: string;
 }

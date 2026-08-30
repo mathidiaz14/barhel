@@ -20,20 +20,26 @@ export function getProviderSessionPath(provider) {
 export function listSessionsStatus() {
     const providers = Object.values(ProviderType);
     const result = {};
+    const base = getSessionBasePath();
     for (const provider of providers) {
-        const pPath = getProviderSessionPath(provider);
+        const pPath = path.join(base, provider.toLowerCase());
         let count = 0;
+        let hasRealSession = false;
         try {
             if (fs.existsSync(pPath)) {
-                count = fs.readdirSync(pPath).length;
+                const files = fs.readdirSync(pPath);
+                count = files.length;
+                // Un perfil con cookies reales contiene Default o subdirectorios de almacenamiento
+                hasRealSession = count > 2 && files.some((f) => ['Default', 'Network', 'Cookies', 'Local Storage', 'Session Storage', 'IndexedDB'].includes(f));
             }
         }
         catch {
             count = 0;
+            hasRealSession = false;
         }
         result[provider] = {
             path: pPath,
-            exists: count > 0,
+            exists: hasRealSession,
             fileCount: count,
         };
     }

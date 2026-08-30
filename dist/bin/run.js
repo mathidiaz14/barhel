@@ -17,6 +17,7 @@ import { CodeGraphEngine } from '../src/codegraph/CodeGraphEngine.js';
 import { SkillManager } from '../src/skills/SkillManager.js';
 import { TelegramBot } from '../src/daemon/TelegramBot.js';
 import { DaemonManager } from '../src/daemon/DaemonManager.js';
+import { runDoctorDiagnostic } from '../src/cli/doctor.js';
 const program = new Command();
 program
     .name('barhel')
@@ -266,43 +267,22 @@ program
         process.exit(1);
     }
 });
-// Subcomando: Diagnóstico de selectores de UI de los proveedores
+// Subcomando: Diagnóstico exhaustivo de salud, autenticación y selectores
 program
     .command('doctor')
-    .description('Verifica que los selectores de UI de los proveedores sigan funcionando')
+    .description('Diagnóstico profundo de autenticación de sesión, Cloudflare, latencia y selectores de UI')
     .option('--provider <id>', 'Verifica solo un proveedor específico')
+    .option('--ping', 'Envía un prompt de prueba real para verificar respuesta de extremo a extremo', false)
     .option('--visible', 'Muestra la ventana visible del navegador', false)
     .action(async (options) => {
-    logger.info('Diagnóstico de selectores de UI de Barhel (barhel doctor)...');
-    const providers = options.provider
-        ? DriverFactory.getMeta(options.provider)
-            ? [DriverFactory.getMeta(options.provider)]
-            : (() => { logger.error(`Proveedor desconocido: "${options.provider}"`); process.exit(1); })()
-        : DriverFactory.getAllProviders();
-    let allOk = true;
-    for (const meta of providers) {
-        console.log('\n' + pc.bold(`🔎 ${meta.name}  ${pc.dim(meta.url)}`));
-        const driver = meta.createDriver();
-        try {
-            await driver.init(!options.visible);
-            const checks = await driver.verifyUI();
-            for (const check of checks) {
-                const badge = check.found ? pc.green('✔ OK') : pc.red('✖ ROTO');
-                if (!check.found)
-                    allOk = false;
-                console.log(`  ${pc.dim(check.name.padEnd(18))} ${badge} ${check.selector ? pc.dim(check.selector) : ''}`);
-            }
-        }
-        catch (err) {
-            allOk = false;
-            console.log(`  ${pc.red('✖ ERROR:')} ${err instanceof Error ? err.message : String(err)}`);
-        }
-        finally {
-            await driver.close();
-        }
+    const ok = await runDoctorDiagnostic({
+        provider: options.provider,
+        ping: options.ping,
+        visible: options.visible,
+    });
+    if (!ok) {
+        process.exitCode = 1;
     }
-    console.log('\n' + (allOk ? pc.green('✔ Todos los selectores están operativos.') : pc.yellow('⚠ Hay selectores rotos o proveedores sin sesión. Revisa barhel login.')));
-    console.log();
 });
 // Subcomando: CodeGraph - Análisis AST y Grafo de Símbolos
 program
