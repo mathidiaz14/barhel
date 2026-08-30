@@ -27,14 +27,6 @@ export interface SessionDashboardState {
  * Utilidad para calcular el ancho visual de un string ignorando secuencias ANSI de color
  */
 export declare function visualLength(str: string): number;
-/**
- * Rellena un string con espacios a la derecha hasta alcanzar el ancho visual deseado
- */
-export declare function padRightVisual(str: string, targetWidth: number): string;
-/**
- * Divide un texto en líneas que respeten el ancho máximo visual
- */
-export declare function wrapTextVisual(text: string, maxWidth: number): string[];
 export declare class DualPane {
     private static state;
     static updateState(partial: Partial<SessionDashboardState>): void;
@@ -44,26 +36,32 @@ export declare class DualPane {
     static incrementAction(type: string): void;
     static incrementTurn(): void;
     /**
-     * Genera el bloque del Banner Superior Izquierdo (ASCII + Subtítulo + Hints)
+     * 1. Renderiza el Header superior con el Logo ASCII y atajos
      */
-    static buildLeftHeaderLines(maxWidth?: number): string[];
+    static renderLogoHeader(dividerWidth?: number): void;
     /**
-     * Genera las 3 Cajas del Panel Lateral Derecho
-     * Caja 1: Metadatos de Sesión y Workspace
-     * Caja 2: Estado de Subagentes (Workers) en vivo
-     * Caja 3: Lista de Tareas (TODO List)
+     * 2. Renderiza la Caja de Datos de la Sesión y Workspace
      */
-    static buildRightSidebarLines(boxWidth?: number): string[];
+    static renderSessionDataBox(boxWidth?: number): void;
     /**
-     * Construye las líneas formateadas de los turnos previos de la sesión para el panel izquierdo
+     * 3. Renderiza el Estado de los Subagentes (Workers)
      */
-    static buildChatHistoryLines(session: ChatSession, maxChatWidth?: number): string[];
+    static renderSubagentsBox(boxWidth?: number): void;
     /**
-     * Renderiza la pantalla completa en Split-Screen permanente (Header + Chat a la izquierda, 3 Cajas a la derecha)
+     * 4. Renderiza la Lista de Tareas (TODO) si existe
+     */
+    static renderTodosBox(boxWidth?: number): void;
+    /**
+     * 5. Renderiza el Historial de la Sesión Anterior con Fecha y Hora exacta
+     */
+    static renderSessionHistory(session: ChatSession, boxWidth?: number): void;
+    /**
+     * Renderiza el dashboard completo secuencial:
+     * 1. Logo superior
+     * 2. Datos de la sesión
+     * 3. Estado de subagentes
+     * 4. TODO si existe
+     * 5. Historial previo si existe con fecha y hora
      */
     static renderFullScreen(session?: ChatSession): void;
-    /**
-     * Renderiza el marco inicial de pantalla dividida
-     */
-    static renderSplitFrame(leftCustomLines?: string[]): void;
 }

@@ -35,50 +35,6 @@ export function visualLength(str: string): number {
   return str.replace(ansiRegex, '').length;
 }
 
-/**
- * Rellena un string con espacios a la derecha hasta alcanzar el ancho visual deseado
- */
-export function padRightVisual(str: string, targetWidth: number): string {
-  const len = visualLength(str);
-  if (len >= targetWidth) {
-    const ansiRegex = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g;
-    const plain = str.replace(ansiRegex, '');
-    if (plain.length > targetWidth) {
-      return str.slice(0, targetWidth - 1) + '…';
-    }
-    return str;
-  }
-  return str + ' '.repeat(targetWidth - len);
-}
-
-/**
- * Divide un texto en líneas que respeten el ancho máximo visual
- */
-export function wrapTextVisual(text: string, maxWidth: number): string[] {
-  if (!text) return [''];
-  const result: string[] = [];
-  const lines = text.split('\n');
-
-  for (const line of lines) {
-    if (visualLength(line) <= maxWidth) {
-      result.push(line);
-    } else {
-      let current = '';
-      const words = line.split(' ');
-      for (const word of words) {
-        if (visualLength(current + (current ? ' ' : '') + word) <= maxWidth) {
-          current += (current ? ' ' : '') + word;
-        } else {
-          if (current) result.push(current);
-          current = word;
-        }
-      }
-      if (current) result.push(current);
-    }
-  }
-  return result;
-}
-
 export class DualPane {
   private static state: SessionDashboardState = {
     title: 'Sesión de trabajo',
@@ -146,33 +102,29 @@ export class DualPane {
   }
 
   /**
-   * Genera el bloque del Banner Superior Izquierdo (ASCII + Subtítulo + Hints)
+   * 1. Renderiza el Header superior con el Logo ASCII y atajos
    */
-  public static buildLeftHeaderLines(maxWidth = 54): string[] {
-    const lines: string[] = [];
-    lines.push(pc.cyan('      ____             __          __   '));
-    lines.push(pc.cyan('     / __ )____ ______/ /_  ___   / /   '));
-    lines.push(pc.cyan('    / __  / __ `/ ___/ __ \\/ _ \\ / /    '));
-    lines.push(pc.cyan('   / /_/ / /_/ / /  / / / /  __// /     '));
-    lines.push(pc.cyan('  /_____/\\__,_/_/  /_/ /_/\\___//_/      '));
-    lines.push(pc.bold(pc.white('  Autonomous Multi-Model Coding Agent   ')));
-    lines.push(pc.gray('  ' + '─'.repeat(Math.min(maxWidth - 4, 46))));
-    lines.push(
-      `  ${pc.dim('Type')} ${pc.cyan('/')} ${pc.dim('for palette')} ${pc.dim('•')} ${pc.cyan('/workers')} ${pc.dim('•')} ${pc.cyan('/help')}`
+  public static renderLogoHeader(dividerWidth = 84): void {
+    const cy = pc.cyan;
+    console.log();
+    console.log(cy('      ____             __          __     '));
+    console.log(cy('     / __ )____ ______/ /_  ___   / /     '));
+    console.log(cy('    / __  / __ `/ ___/ __ \\/ _ \\ / /      '));
+    console.log(cy('   / /_/ / /_/ / /  / / / /  __// /       '));
+    console.log(cy('  /_____/\\__,_/_/  /_/ /_/\\___//_/        '));
+    console.log(pc.bold(pc.white('  Autonomous Multi-Model Coding Agent     ')));
+    console.log(`  ${pc.gray('─'.repeat(dividerWidth))}`);
+    console.log(
+      `  ${pc.dim('Type')} ${pc.cyan('/')} ${pc.dim('for command palette')} ${pc.dim('•')} ${pc.cyan('/workers')} ${pc.dim('for analysis')} ${pc.dim('•')} ${pc.cyan('Tab')} ${pc.dim('to complete')} ${pc.dim('•')} ${pc.cyan('/help')}`
     );
-    lines.push(pc.gray('  ' + '─'.repeat(Math.min(maxWidth - 4, 46))));
-    lines.push('');
-    return lines;
+    console.log(`  ${pc.gray('─'.repeat(dividerWidth))}`);
+    console.log();
   }
 
   /**
-   * Genera las 3 Cajas del Panel Lateral Derecho
-   * Caja 1: Metadatos de Sesión y Workspace
-   * Caja 2: Estado de Subagentes (Workers) en vivo
-   * Caja 3: Lista de Tareas (TODO List)
+   * 2. Renderiza la Caja de Datos de la Sesión y Workspace
    */
-  public static buildRightSidebarLines(boxWidth = 48): string[] {
-    const lines: string[] = [];
+  public static renderSessionDataBox(boxWidth = 84): void {
     const dirBase = path.basename(this.state.workdir) || this.state.workdir;
     const branchStr = this.state.branch || getGitBranch(this.state.workdir);
     const branchTag = branchStr ? `:${branchStr}` : '';
@@ -185,106 +137,110 @@ export class DualPane {
     const cy = pc.cyan;
     const gr = pc.gray;
 
-    const topBorder = (title: string) => gr(`┌─ ${pc.bold(title)} ${'─'.repeat(Math.max(2, boxWidth - visualLength(title) - 5))}┐`);
-    const bottomBorder = () => gr(`└${'─'.repeat(boxWidth - 1)}┘`);
-    const lineWrapper = (content: string) => `${gr('│')} ${padRightVisual(content, boxWidth - 4)} ${gr('│')}`;
-
-    // ── CAJA 1: SESIÓN & METADATOS ──────────────────────────────────────────────
-    lines.push(topBorder('SESIÓN & METADATOS'));
-    lines.push(lineWrapper(`${g('Session   :')} ${w(this.state.title.slice(0, 18))} ${g(`(${idBadge})`)}`));
-    lines.push(lineWrapper(`${g('Workspace :')} ${w(dirBase)} ${g(`(${this.state.workdir.slice(0, 14)}${branchTag})`)}`));
-    lines.push(lineWrapper(`${g('Leader    :')} ${cy(this.state.leaderName.slice(0, 20))} ${g(`(${this.state.leaderStatus})`)}`));
-    
     const workerNames = this.state.workers.length > 0
-      ? this.state.workers.map((wrk) => wrk.id).join(', ')
+      ? this.state.workers.map((wrk) => wrk.name || wrk.id).join(', ')
       : 'ninguno';
-    lines.push(lineWrapper(`${g('Workers   :')} ${pc.yellow(workerNames)}`));
-    lines.push(lineWrapper(`${g('Mode      :')} ${modeBadge} ${g('(/auto to toggle)')}`));
-    lines.push(lineWrapper(`${g('Version   :')} ${w(`Barhel ${version}`)}`));
-    lines.push(bottomBorder());
 
-    // ── CAJA 2: ESTADO DE SUBAGENTES (WORKERS) ──────────────────────────────────
+    console.log(`  ${gr('┌─')} ${pc.bold('SESIÓN & WORKSPACE')} ${gr('─'.repeat(Math.max(4, boxWidth - 23)))}`);
+    console.log(`  ${gr('│')}  ${g('Session   :')} ${w(this.state.title)} ${g(`(${idBadge})`)}`);
+    console.log(`  ${gr('│')}  ${g('Workspace :')} ${w(dirBase)} ${g(`(${this.state.workdir}${branchTag})`)}`);
+    console.log(`  ${gr('│')}  ${g('Leader    :')} ${cy(this.state.leaderName)} ${g(`(${this.state.leaderStatus})`)}`);
+    console.log(`  ${gr('│')}  ${g('Workers   :')} ${pc.yellow(workerNames)}`);
+    console.log(`  ${gr('│')}  ${g('Mode      :')} ${modeBadge} ${g('(/auto to toggle)')}`);
+    console.log(`  ${gr('│')}  ${g('Version   :')} ${w(`Barhel ${version}`)}`);
+    console.log(`  ${gr('└─')}${gr('─'.repeat(boxWidth - 4))}`);
+    console.log();
+  }
+
+  /**
+   * 3. Renderiza el Estado de los Subagentes (Workers)
+   */
+  public static renderSubagentsBox(boxWidth = 84): void {
     const supervisorSnapshot = ProgressSupervisor.getSnapshot();
-    lines.push(topBorder('ESTADO DE SUBAGENTES'));
+    const gr = pc.gray;
+    const w = pc.white;
+    const g = pc.dim;
+
+    console.log(`  ${gr('┌─')} ${pc.bold('ESTADO DE SUBAGENTES (WORKERS)')} ${gr('─'.repeat(Math.max(4, boxWidth - 34)))}`);
 
     if (this.state.workers.length === 0) {
-      lines.push(lineWrapper(g('  Sin workers secundarios configurados')));
+      console.log(`  ${gr('│')}  ${g('Sin workers secundarios configurados')}`);
     } else {
       for (const wrk of this.state.workers) {
         const agInfo = supervisorSnapshot.agents[wrk.id.toLowerCase()];
         let icon = pc.dim('[●]');
-        let statusText = pc.dim('En espera (Listo)');
+        let statusText = pc.dim('💤 En espera (Listo)');
 
         if (agInfo) {
           if (agInfo.status === 'thinking' || agInfo.status === 'executing') {
             icon = pc.yellow('[⚡]');
-            statusText = pc.cyan(`Trabajando (${agInfo.percentage}%)`);
+            statusText = pc.cyan(`🔄 Trabajando (${agInfo.percentage}%)`);
           } else if (agInfo.status === 'completed') {
             icon = pc.green('[✓]');
-            statusText = pc.green('Completado');
+            statusText = pc.green('✓ Tarea completada');
           } else if (agInfo.status === 'failed') {
             icon = pc.red('[✖]');
-            statusText = pc.red('No disponible');
+            statusText = pc.red('✖ No disponible');
           }
         }
 
-        const nameLabel = w(wrk.name.slice(0, 14).padEnd(14));
-        lines.push(lineWrapper(` ${icon} ${nameLabel} : ${statusText}`));
+        const nameLabel = w(wrk.name.padEnd(20));
+        console.log(`  ${gr('│')}  ${icon} ${nameLabel} : ${statusText}`);
       }
     }
-    lines.push(bottomBorder());
 
-    // ── CAJA 3: PLAN DE TAREAS (TODO LIST) ──────────────────────────────────────
-    lines.push(topBorder('PLAN DE TAREAS (TODOS)'));
-    const todos = this.state.todos;
-
-    if (todos.length === 0) {
-      lines.push(lineWrapper(g('  (Sin plan de tareas activo)')));
-    } else {
-      const completedCount = todos.filter(
-        (t) => (t.status || '').toLowerCase() === 'completed' || (t.status || '').toLowerCase() === 'done'
-      ).length;
-      const pct = Math.round((completedCount / todos.length) * 100);
-      const barLen = 10;
-      const filled = Math.round((pct / 100) * barLen);
-      const empty = barLen - filled;
-      const progressBar = `[${pc.green('█'.repeat(filled))}${pc.dim('░'.repeat(empty))}] ${pct}% (${completedCount}/${todos.length})`;
-
-      lines.push(lineWrapper(` ${progressBar}`));
-
-      // Mostrar subtareas más relevantes
-      const previewTodos = todos.slice(0, 6);
-      previewTodos.forEach((item, idx) => {
-        let statusIcon = pc.dim('[ ]');
-        const st = (item.status || 'pending').toLowerCase();
-        if (st === 'completed' || st === 'done') {
-          statusIcon = pc.green('[✓]');
-        } else if (st === 'in_progress' || st === 'running') {
-          statusIcon = pc.yellow('[▶]');
-        } else if (st === 'failed') {
-          statusIcon = pc.red('[✖]');
-        }
-
-        const agentTag = item.assignedTo ? g(` [${item.assignedTo.toUpperCase()}]`) : '';
-        const taskName = w(item.task.slice(0, 22));
-        lines.push(lineWrapper(` ${statusIcon} ${idx + 1}. ${taskName}${agentTag}`));
-      });
-
-      if (todos.length > 6) {
-        lines.push(lineWrapper(g(`    ... (+${todos.length - 6} tareas más)`)));
-      }
-    }
-    lines.push(bottomBorder());
-
-    return lines;
+    console.log(`  ${gr('└─')}${gr('─'.repeat(boxWidth - 4))}`);
+    console.log();
   }
 
   /**
-   * Construye las líneas formateadas de los turnos previos de la sesión para el panel izquierdo
+   * 4. Renderiza la Lista de Tareas (TODO) si existe
    */
-  public static buildChatHistoryLines(session: ChatSession, maxChatWidth = 56): string[] {
-    const lines: string[] = [];
-    if (!session.turns || session.turns.length === 0) return lines;
+  public static renderTodosBox(boxWidth = 84): void {
+    const todos = this.state.todos;
+    if (!todos || todos.length === 0) return;
+
+    const gr = pc.gray;
+    const w = pc.white;
+    const g = pc.dim;
+
+    const completedCount = todos.filter(
+      (t) => (t.status || '').toLowerCase() === 'completed' || (t.status || '').toLowerCase() === 'done'
+    ).length;
+    const pct = Math.round((completedCount / todos.length) * 100);
+    const barLen = 14;
+    const filled = Math.round((pct / 100) * barLen);
+    const empty = barLen - filled;
+    const progressBar = `[${pc.green('█'.repeat(filled))}${pc.dim('░'.repeat(empty))}] ${pct}% (${completedCount}/${todos.length} completadas)`;
+
+    console.log(`  ${gr('┌─')} ${pc.bold('PLAN DE TAREAS (TODOS)')} ${gr('─'.repeat(Math.max(4, boxWidth - 27)))}`);
+    console.log(`  ${gr('│')}  ${pc.bold('Progreso:')} ${progressBar}`);
+    console.log(`  ${gr('│')}`);
+
+    todos.forEach((item, idx) => {
+      let statusIcon = pc.dim('[ ]');
+      const st = (item.status || 'pending').toLowerCase();
+      if (st === 'completed' || st === 'done') {
+        statusIcon = pc.green('[✓]');
+      } else if (st === 'in_progress' || st === 'running') {
+        statusIcon = pc.yellow('[▶]');
+      } else if (st === 'failed') {
+        statusIcon = pc.red('[✖]');
+      }
+
+      const agentTag = item.assignedTo ? g(` [${item.assignedTo.toUpperCase()}]`) : '';
+      console.log(`  ${gr('│')}  ${statusIcon} ${idx + 1}. ${w(item.task)}${agentTag}`);
+    });
+
+    console.log(`  ${gr('└─')}${gr('─'.repeat(boxWidth - 4))}`);
+    console.log();
+  }
+
+  /**
+   * 5. Renderiza el Historial de la Sesión Anterior con Fecha y Hora exacta
+   */
+  public static renderSessionHistory(session: ChatSession, boxWidth = 84): void {
+    if (!session.turns || session.turns.length === 0) return;
 
     const workdir = session.workdir || process.cwd();
     const cleanPath = (rawPath: string): string => {
@@ -301,107 +257,148 @@ export class DualPane {
       }
     };
 
-    session.turns.forEach((turn: TurnRecord, idx: number) => {
-      const time = turn.timestamp ? turn.timestamp.substring(11, 16) : '';
-      const turnHeader = `Turno ${idx + 1}${time ? ` (${time})` : ''}`;
-      const headerBorder = pc.blue('┌─ ') + pc.bold(pc.white(turnHeader)) + pc.blue(' ' + '─'.repeat(Math.max(4, maxChatWidth - turnHeader.length - 6)));
-      lines.push(headerBorder);
+    const cleanCommand = (cmd: string): string => {
+      if (!cmd) return '';
+      return cmd.replace(/^cd\s+["']?[^&"']+["']?\s*&&\s*/i, '').trim();
+    };
 
-      // Prompt usuario
-      lines.push(`${pc.blue('│')} ${pc.bold(pc.cyan('👤 user ❯'))} ${pc.white(pc.bold(turn.prompt.slice(0, maxChatWidth - 14)))}`);
+    const formatDateTime = (isoString?: string): string => {
+      if (!isoString) return '';
+      try {
+        const d = new Date(isoString);
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const day = pad(d.getDate());
+        const month = pad(d.getMonth() + 1);
+        const year = d.getFullYear();
+        const hours = pad(d.getHours());
+        const mins = pad(d.getMinutes());
+        const secs = pad(d.getSeconds());
+        return `${day}/${month}/${year} ${hours}:${mins}:${secs}`;
+      } catch {
+        return isoString;
+      }
+    };
+
+    const gr = pc.gray;
+    const turnCount = session.turns.length;
+
+    console.log(`  ${pc.bold(pc.cyan('📜 Historial de la Sesión'))} ${pc.white(`"${session.title}"`)} ${pc.dim(`(#${session.id.slice(0, 8)} • ${turnCount} turno${turnCount > 1 ? 's' : ''})`)}`);
+    console.log(`  ${gr('─'.repeat(boxWidth))}`);
+
+    session.turns.forEach((turn: TurnRecord, idx: number) => {
+      const dtStr = formatDateTime(turn.timestamp);
+      const turnHeader = `Turno ${idx + 1}${dtStr ? ` (${dtStr})` : ''}`;
+      
+      console.log(`\n  ${pc.bold(pc.blue('┌─'))} ${pc.bold(pc.white(turnHeader))} ${gr('─'.repeat(Math.max(4, boxWidth - turnHeader.length - 6)))}`);
+      
+      // Prompt del usuario
+      console.log(`  ${pc.blue('│')}  ${pc.bold(pc.cyan('👤 user ❯'))} ${pc.white(pc.bold(turn.prompt))}`);
 
       // Razonamiento
       if (turn.thought && turn.thought.trim()) {
-        lines.push(`${pc.blue('│')}  ${pc.yellow('💭 Razonamiento:')}`);
-        const thoughtLines = turn.thought.trim().split('\n').filter(Boolean).slice(0, 3);
-        for (const tl of thoughtLines) {
-          lines.push(`${pc.blue('│')}    ${pc.dim(tl.slice(0, maxChatWidth - 8))}`);
+        console.log(`  ${pc.blue('│')}`);
+        console.log(`  ${pc.blue('│')}  ${pc.yellow('💭 Razonamiento:')}`);
+        const thoughtLines = turn.thought.trim().split('\n').filter(Boolean);
+        const preview = thoughtLines.slice(0, 4);
+        for (const line of preview) {
+          console.log(`  ${pc.blue('│')}     ${pc.dim(line)}`);
+        }
+        if (thoughtLines.length > 4) {
+          console.log(`  ${pc.blue('│')}     ${pc.gray(`... (+${thoughtLines.length - 4} líneas más)`)}`);
         }
       }
 
-      // Acciones
+      // Acciones ejecutadas
       if (turn.actions && turn.actions.length > 0) {
-        lines.push(`${pc.blue('│')}  ${pc.magenta('⚡ Acciones:')}`);
+        console.log(`  ${pc.blue('│')}`);
+        console.log(`  ${pc.blue('│')}  ${pc.magenta('⚡ Acciones ejecutadas:')}`);
         for (const act of turn.actions) {
-          if (act.type === 'read_file') {
-            lines.push(`${pc.blue('│')}    ${pc.dim('• Read')} ${pc.cyan(cleanPath(String(act.details?.path || '')).slice(0, maxChatWidth - 12))}`);
-          } else if (act.type === 'write_file') {
-            lines.push(`${pc.blue('│')}    ${pc.green('• Write')} ${pc.white(cleanPath(String(act.details?.path || '')).slice(0, maxChatWidth - 13))}`);
-          } else if (act.type === 'run_command') {
-            lines.push(`${pc.blue('│')}    ${pc.white('• $')} ${pc.white(String(act.details?.command || '').slice(0, maxChatWidth - 10))}`);
-          } else if (act.type === 'delegate_task') {
-            lines.push(`${pc.blue('│')}    ${pc.magenta('•')} ${pc.magenta(`Delegó a ${String(act.details?.agent || '').toUpperCase()}`)}`);
-          } else if (act.type !== 'finish') {
-            lines.push(`${pc.blue('│')}    ${pc.dim('•')} ${pc.white(act.type)}`);
+          switch (act.type) {
+            case 'read_file':
+              console.log(`  ${pc.blue('│')}     ${pc.dim('•')} ${pc.dim('Read')} ${pc.cyan(cleanPath(String(act.details?.path || '')))}`);
+              break;
+            case 'write_file':
+              console.log(`  ${pc.blue('│')}     ${pc.green('•')} ${pc.green('Write')} ${pc.white(cleanPath(String(act.details?.path || '')))}`);
+              break;
+            case 'list_directory':
+            case 'glob':
+              console.log(`  ${pc.blue('│')}     ${pc.yellow('•')} ${pc.yellow('Glob')} ${pc.dim(`"${act.details?.path || act.details?.pattern || '.'}"`)}`);
+              break;
+            case 'run_command':
+              console.log(`  ${pc.blue('│')}     ${pc.white('•')} ${pc.bold(pc.white('$'))} ${pc.white(cleanCommand(String(act.details?.command || '')))}`);
+              break;
+            case 'eval_code':
+              console.log(`  ${pc.blue('│')}     ${pc.cyan('•')} ${pc.cyan('Test Sandbox')} ${pc.dim('(eval_code)')}`);
+              break;
+            case 'auto_test':
+              console.log(`  ${pc.blue('│')}     ${pc.green('•')} ${pc.green('Test Runner')} ${pc.dim('(auto_test)')}`);
+              break;
+            case 'codegraph':
+              console.log(`  ${pc.blue('│')}     ${pc.cyan('•')} ${pc.cyan('CodeGraph')} ${pc.dim(String(act.details?.symbol || act.details?.query || 'AST'))}`);
+              break;
+            case 'delegate_task':
+              console.log(`  ${pc.blue('│')}     ${pc.magenta('•')} ${pc.magenta(`Delegó a ${String(act.details?.agent || '').toUpperCase()}`)}`);
+              break;
+            case 'finish':
+              break;
+            default:
+              console.log(`  ${pc.blue('│')}     ${pc.dim('•')} ${pc.white(act.type)}`);
+              break;
           }
         }
       }
 
-      // Resumen
+      // Resumen final
       if (turn.summary && turn.summary.trim()) {
-        const sumLine = turn.summary.trim().split('\n')[0];
-        lines.push(`${pc.blue('│')}  ${pc.green('✓ Resumen:')} ${pc.white(sumLine.slice(0, maxChatWidth - 16))}`);
+        console.log(`  ${pc.blue('│')}`);
+        console.log(`  ${pc.blue('│')}  ${pc.green('✓ Resumen:')}`);
+        const summaryLines = turn.summary.trim().split('\n').filter(Boolean);
+        for (const sLine of summaryLines) {
+          console.log(`  ${pc.blue('│')}     ${pc.white(sLine)}`);
+        }
       }
 
-      lines.push(pc.blue('└' + '─'.repeat(maxChatWidth - 1)));
-      lines.push('');
+      console.log(`  ${pc.blue('└─')}${gr('─'.repeat(boxWidth - 4))}`);
     });
 
-    return lines;
+    console.log();
+    console.log(`  ${gr('─'.repeat(boxWidth))}`);
+    console.log();
   }
 
   /**
-   * Renderiza la pantalla completa en Split-Screen permanente (Header + Chat a la izquierda, 3 Cajas a la derecha)
+   * Renderiza el dashboard completo secuencial:
+   * 1. Logo superior
+   * 2. Datos de la sesión
+   * 3. Estado de subagentes
+   * 4. TODO si existe
+   * 5. Historial previo si existe con fecha y hora
    */
   public static renderFullScreen(session?: ChatSession): void {
     console.clear();
-    const totalCols = process.stdout.columns || 120;
-    const rightBoxWidth = 48;
-    const leftWidth = Math.max(48, totalCols - rightBoxWidth - 5);
-    const sep = pc.gray('│');
+    const totalCols = process.stdout.columns || 110;
+    const boxWidth = Math.min(totalCols - 4, 88);
 
-    // 1. Líneas del lado izquierdo: Header fijo + Historial de chat
-    const leftHeaderLines = this.buildLeftHeaderLines(leftWidth);
-    const leftChatLines = session ? this.buildChatHistoryLines(session, leftWidth) : [];
-    const allLeftLines = [...leftHeaderLines, ...leftChatLines];
+    // 1. Logo
+    this.renderLogoHeader(boxWidth);
 
-    // 2. Líneas del lado derecho: 3 Cajas fijas
-    const rightLines = this.buildRightSidebarLines(rightBoxWidth);
+    // 2. Datos de sesión
+    this.renderSessionDataBox(boxWidth);
 
-    // 3. Renderizar fila a fila balanceando ambas columnas
-    const maxRows = Math.max(allLeftLines.length, rightLines.length);
+    // 3. Estado de subagentes
+    this.renderSubagentsBox(boxWidth);
 
-    for (let r = 0; r < maxRows; r++) {
-      const leftRaw = allLeftLines[r] || '';
-      const rightRaw = rightLines[r] || '';
-
-      const leftPadded = padRightVisual(leftRaw, leftWidth);
-      console.log(`  ${leftPadded}  ${sep}  ${rightRaw}`);
+    // 4. TODO si existe
+    if (this.state.todos && this.state.todos.length > 0) {
+      this.renderTodosBox(boxWidth);
+    } else if (session?.todos && session.todos.length > 0) {
+      this.state.todos = session.todos;
+      this.renderTodosBox(boxWidth);
     }
-    console.log();
-  }
 
-  /**
-   * Renderiza el marco inicial de pantalla dividida
-   */
-  public static renderSplitFrame(leftCustomLines?: string[]): void {
-    const totalCols = process.stdout.columns || 120;
-    const rightBoxWidth = 48;
-    const leftWidth = Math.max(48, totalCols - rightBoxWidth - 5);
-    const sep = pc.gray('│');
-
-    const leftLines = leftCustomLines || this.buildLeftHeaderLines(leftWidth);
-    const rightLines = this.buildRightSidebarLines(rightBoxWidth);
-    const maxRows = Math.max(leftLines.length, rightLines.length);
-
-    console.log();
-    for (let r = 0; r < maxRows; r++) {
-      const leftRaw = leftLines[r] || '';
-      const rightRaw = rightLines[r] || '';
-
-      const leftPadded = padRightVisual(leftRaw, leftWidth);
-      console.log(`  ${leftPadded}  ${sep}  ${rightRaw}`);
+    // 5. Historial con fecha y hora si existe
+    if (session && session.turns && session.turns.length > 0) {
+      this.renderSessionHistory(session, boxWidth);
     }
-    console.log();
   }
 }
