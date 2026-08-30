@@ -5,7 +5,7 @@ import { ProviderType } from '../types/providers.js';
 import { logger } from '../utils/logger.js';
 import { ConfigManager } from '../utils/config.js';
 import { HistoryManager } from '../utils/history.js';
-import { getSessionBasePath } from '../utils/session.js';
+import { getSessionBasePath, listSessionsStatus } from '../utils/session.js';
 import { gitCommit, gitDiff, gitStatus } from '../utils/git.js';
 import { TUI } from '../cli/tui.js';
 import { ProgressSupervisor } from './ProgressSupervisor.js';
@@ -284,6 +284,10 @@ export class Orchestrator {
         if (this.workerDrivers.has(key)) {
             return this.workerDrivers.get(key);
         }
+        const sessionStatus = listSessionsStatus();
+        if (!sessionStatus[key]?.exists || sessionStatus[key]?.fileCount === 0) {
+            throw new Error(`El worker "${key}" no tiene sesión iniciada. Inicia sesión con: barhel login ${key}`);
+        }
         const driver = DriverFactory.createDriver(key);
         const meta = DriverFactory.getMeta(key);
         const displayName = meta?.name || key.toUpperCase();
@@ -510,7 +514,7 @@ export class Orchestrator {
                             const ms = Math.round(performance.now() - workerStart);
                             const errMsg = batchErr instanceof Error ? batchErr.message : String(batchErr);
                             batchResults.push({ agent: target, ok: false, error: errMsg, ms });
-                            logger.error(`Error en worker ${target} (batch)`, batchErr);
+                            logger.warn(`Worker ${target.toUpperCase()} no disponible (${errMsg})`);
                         }
                     }));
                     const summaryParts = batchResults.map((r) => r.ok
@@ -695,9 +699,11 @@ export class Orchestrator {
      * Genera el System Prompt inicial
      */
     buildSystemPrompt(userGoal) {
-        const workersListStr = this.activeWorkers.length > 0
-            ? this.activeWorkers.join(' | ')
-            : 'chatgpt | gemini | claude | qwen | mistral | perplexity';
+        const sessionStatus = listSessionsStatus();
+        const readyWorkers = this.activeWorkers.filter((w) => sessionStatus[w]?.exists && sessionStatus[w]?.fileCount > 0);
+        const workersListStr = readyWorkers.length > 0
+            ? readyWorkers.join(' | ')
+            : (this.activeWorkers.length > 0 ? this.activeWorkers.join(' | ') : 'chatgpt | gemini | claude | qwen | mistral | perplexity');
         const leaderMeta = DriverFactory.getMeta(this.leaderId);
         const leaderName = leaderMeta?.name || this.leaderId;
         const planOnlyNote = this.options.planOnly
