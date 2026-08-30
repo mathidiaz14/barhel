@@ -83,7 +83,7 @@ export declare class Orchestrator {
      */
     runTurn(userGoal: string): Promise<void>;
     /**
-     * Devuelve el próximo proveedor de respaldo disponible (no el actual, no usado aún)
+     * Devuelve el próximo proveedor de respaldo disponible con sesión iniciada
      */
     private getNextFallback;
     /**

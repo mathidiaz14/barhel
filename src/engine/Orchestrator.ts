@@ -425,22 +425,36 @@ export class Orchestrator {
             break;
           }
           this.sendFailures++;
-          logger.error(`Error de comunicación con ${this.leaderDriver.displayName}`, err);
+          const errMsg = err instanceof Error ? err.message : String(err);
+          const isRateLimit = errMsg.toLowerCase().includes('rate limit') || errMsg.toLowerCase().includes('too many requests') || errMsg.toLowerCase().includes('429');
 
           const fallback = this.getNextFallback();
           if (fallback) {
-            logger.warn(`Proveedor primario falló (${this.sendFailures}x) → activando respaldo inmediato [${fallback}]`);
+            const fallbackMeta = DriverFactory.getMeta(fallback);
+            const fallbackName = fallbackMeta?.name || fallback.toUpperCase();
+            logger.warn(`⚠ ${this.leaderDriver.displayName} ${isRateLimit ? 'alcanzó límite de peticiones (Rate Limit)' : 'no disponible'} → Conmutando automáticamente al líder de respaldo [${fallbackName}]...`);
             await this.applyFallbackLeader(fallback);
             if (!this.isInitialized) {
               try {
                 await this.initSession();
               } catch (initErr) {
-                logger.error('Fallo al inicializar el líder de respaldo', initErr);
-                break;
+                logger.warn(`No se pudo inicializar el líder de respaldo [${fallbackName}]`);
+                continue;
               }
             }
             iteratorState.fallbackRetries++;
             continue;
+          }
+
+          if (isRateLimit && this.sendFailures <= 2) {
+            logger.warn(`Rate limit en ${this.leaderDriver.displayName}. Pausando 12s antes de reintentar (intento ${this.sendFailures}/2)...`);
+            await new Promise((r) => setTimeout(r, 12000));
+            continue;
+          }
+
+          logger.warn(`Error en ${this.leaderDriver.displayName}: ${errMsg}`);
+          if (isRateLimit) {
+            console.log(pc.yellow(`\n💡 Tip: ${this.leaderDriver.displayName} está temporalmente saturado. Puedes cambiar de modelo con: `) + pc.bold(pc.cyan('/leader chatgpt')) + pc.yellow(' o ') + pc.bold(pc.cyan('/leader gemini\n')));
           }
           break;
         }
@@ -651,15 +665,41 @@ export class Orchestrator {
   }
 
   /**
-   * Devuelve el próximo proveedor de respaldo disponible (no el actual, no usado aún)
+   * Devuelve el próximo proveedor de respaldo disponible con sesión iniciada
    */
   private getNextFallback(): string | null {
+    const sessionStatus = listSessionsStatus();
+
+    // 1. Prioridad: Proveedores en fallbackOrder explícito que tengan sesión
     for (const id of this.fallbackOrder) {
       const key = String(id).toLowerCase().trim();
       if (key !== this.leaderId && !this.fallbackUsed.has(key) && DriverFactory.getMeta(key)) {
-        return key;
+        if (sessionStatus[key]?.exists && sessionStatus[key]?.fileCount > 0) {
+          return key;
+        }
       }
     }
+
+    // 2. Segunda prioridad: Workers activos configurados con sesión
+    for (const id of this.activeWorkers) {
+      const key = String(id).toLowerCase().trim();
+      if (key !== this.leaderId && !this.fallbackUsed.has(key) && DriverFactory.getMeta(key)) {
+        if (sessionStatus[key]?.exists && sessionStatus[key]?.fileCount > 0) {
+          return key;
+        }
+      }
+    }
+
+    // 3. Tercera prioridad: Cualquier otro proveedor con sesión iniciada
+    for (const meta of DriverFactory.getAllProviders()) {
+      const key = meta.id;
+      if (key !== this.leaderId && !this.fallbackUsed.has(key)) {
+        if (sessionStatus[key]?.exists && sessionStatus[key]?.fileCount > 0) {
+          return key;
+        }
+      }
+    }
+
     return null;
   }
 
