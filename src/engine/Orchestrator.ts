@@ -837,6 +837,38 @@ export class Orchestrator {
   /**
    * Genera el System Prompt inicial
    */
+  /**
+   * Genera el contexto de tareas pendientes existentes para asegurar la ejecución secuencial estricta
+   */
+  private buildTodosContextPrompt(): string {
+    if (!this.currentTodos || this.currentTodos.length === 0) return '';
+
+    const firstPendingIdx = this.currentTodos.findIndex(
+      (t) => t.status === 'pending' || t.status === 'in_progress'
+    );
+
+    const lines = this.currentTodos.map((t, idx) => {
+      const icon = t.status === 'completed' ? '[✓]' : (t.status === 'in_progress' ? '[▶]' : '[ ]');
+      const agent = t.assignedTo ? ` [${t.assignedTo.toUpperCase()}]` : '';
+      const flag = idx === firstPendingIdx ? ' <--- ¡ESTA ES LA SIGUIENTE TAREA A REALIZAR OBLIGATORIAMENTE!' : '';
+      return `  ${icon} ${idx + 1}. ${t.task}${agent} (${t.status})${flag}`;
+    });
+
+    const targetDirective = firstPendingIdx !== -1
+      ? `\n🎯 TAREA OBLIGATORIA INMEDIATA: Debes ejecutar la tarea #${firstPendingIdx + 1}: "${this.currentTodos[firstPendingIdx].task}".`
+      : '';
+
+    return `\n📋 ESTADO ACTUAL DEL PLAN DE TAREAS (TODOS):\n${lines.join('\n')}\n${targetDirective}
+REGLA ESTRICTA DE EJECUCIÓN SECUENCIAL DE TAREAS:
+1. NUNCA te saltes tareas pendientes para saltar a las del final.
+2. Debes abordar obligatoriamente la primera tarea pendiente de la lista (#${firstPendingIdx !== -1 ? firstPendingIdx + 1 : 1}).
+3. Si una tarea está asignada a un worker (como Claude o ChatGPT) que no está disponible o falla, reasígnala a "leader" y resuélvela tú mismo usando tus herramientas locales, pero NO la ignores.
+4. Mantén en tu JSON el array "todos" reflejando todas las tareas existentes, marcando como "in_progress" la que estás ejecutando y "completed" las que ya terminaron.\n`;
+  }
+
+  /**
+   * Genera el System Prompt inicial
+   */
   private buildSystemPrompt(userGoal: string): string {
     const sessionStatus = listSessionsStatus();
     const readyWorkers = this.activeWorkers.filter(
@@ -859,13 +891,14 @@ export class Orchestrator {
       : '';
 
     const skillsPrompt = SkillManager.buildSkillsSystemPrompt();
+    const todosPrompt = this.buildTodosContextPrompt();
 
     return `ERES BARHEL (${leaderName}), UN ASISTENTE DE CODIFICACIÓN CLI AUTÓNOMO Y AVANZADO (ESTILO OPENCODE / CLAUDE CODE).
 Tu objetivo es resolver la siguiente instrucción del usuario en su proyecto local:
 "${userGoal}"
 
 DIRECTORIO DE TRABAJO: ${this.toolEngine.getWorkdir()}
-${planOnlyNote}${summaryNote}${skillsPrompt}
+${planOnlyNote}${summaryNote}${skillsPrompt}${todosPrompt}
 PROTOCOLO DE ACCIÓN REACT OBLIGATORIO:
 Debes responder SIEMPRE Y EXCLUSIVAMENTE con un único bloque JSON válido:
 
@@ -906,6 +939,7 @@ PLAN DE TAREAS DINÁMICO (TODO LIST):
 - Estados válidos de cada subtarea: "pending" | "in_progress" | "completed" | "failed".
 - Agentes asignados ("assignedTo"): "leader" o el worker correspondiente ("claude", "chatgpt", "gemini", etc.).
 - Actualiza este listado en cada respuesta marcando "completed" lo terminado y "in_progress" lo que estás ejecutando.
+- NUNCA te saltes tareas pendientes para saltar a las del final. Aborda las tareas pendientes estrictamente en orden.
 
 HERRAMIENTAS DISPONIBLES:
 1. "eval_code": 🧪 EJECUCIÓN DE PRUEBAS EN SANDBOX: Ejecuta un script de prueba con assertions (en TypeScript/tsx, Python, etc.) en un entorno temporal aislado importando tu código recién programado para verificar que funciona exactamente como se espera.
@@ -951,10 +985,13 @@ Comienza analizando el proyecto y decidiendo la primera acción en JSON.`;
     const planNote = this.options.planOnly
       ? '\n[MODO PLAN ONLY: simula write_file/run_command sin aplicarlos; termina con finish + plan].'
       : '';
+    const todosPrompt = this.buildTodosContextPrompt();
+
     return `NUEVA INSTRUCCIÓN DEL USUARIO EN LA SESIÓN DE BARHEL:
 "${userGoal}"
-${planNote}
+${planNote}${todosPrompt}
 Continúa en este mismo contexto del workspace (${this.toolEngine.getWorkdir()}).
-Recuerda responder ESTRICTAMENTE en formato JSON con tu "thought", tu lista "todos" actualizada y tu "action" (read_file, write_file, run_command, list_directory, grep, glob, check, delegate_task, delegate_batch, finish).`;
+Recuerda responder ESTRICTAMENTE en formato JSON con tu "thought", tu lista "todos" actualizada y tu "action" (read_file, write_file, run_command, list_directory, grep, glob, check, eval_code, auto_test, delegate_task, delegate_batch, finish).
+Aborda la siguiente tarea pendiente en orden secuencial sin saltarte pasos.`;
   }
 }

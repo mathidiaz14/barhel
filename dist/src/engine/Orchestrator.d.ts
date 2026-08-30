@@ -110,6 +110,13 @@ export declare class Orchestrator {
     /**
      * Genera el System Prompt inicial
      */
+    /**
+     * Genera el contexto de tareas pendientes existentes para asegurar la ejecución secuencial estricta
+     */
+    private buildTodosContextPrompt;
+    /**
+     * Genera el System Prompt inicial
+     */
     private buildSystemPrompt;
     /**
      * Genera prompt para turnos de conversación sucesivos
