@@ -61,9 +61,13 @@ export declare class TUI {
     /**
      * Renderiza el historial previo de turnos al reanudar una sesión
      */
+    /**
+     * Renderiza el historial previo de turnos al reanudar una sesión con formato amplio y legible
+     */
     static renderSessionHistory(session: {
         id: string;
         title: string;
+        workdir?: string;
         turns: Array<{
             prompt: string;
             thought?: string;
