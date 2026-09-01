@@ -3,13 +3,14 @@
 import { Command } from 'commander';
 import pc from 'picocolors';
 import path from 'node:path';
+import os from 'node:os';
 import fs from 'node:fs';
 import { startInteractiveChat } from '../src/cli/repl.js';
 import { Orchestrator } from '../src/engine/Orchestrator.js';
 import { DriverFactory } from '../src/drivers/DriverFactory.js';
 import { ConfigManager } from '../src/utils/config.js';
 import { HistoryManager } from '../src/utils/history.js';
-import { listSessionsStatus, getSessionBasePath } from '../src/utils/session.js';
+import { listSessionsStatus, getSessionBasePath, importSessionsFromBrowser } from '../src/utils/session.js';
 import { logger } from '../src/utils/logger.js';
 import { execSync } from 'node:child_process';
 import { getBarhelVersion } from '../src/utils/version.js';
@@ -200,6 +201,134 @@ program
       logger.error(`Error durante el proceso de login para "${target}"`, err);
       process.exit(1);
     }
+  });
+
+// Subcomando: Importar sesiones de Chrome/Edge a los perfiles de barhel
+program
+  .command('import-sessions')
+  .alias('import')
+  .description('Importa sesiones de Chrome/Edge a los perfiles de barhel para proveedores configurados')
+  .option('-b, --browser <name>', 'Navegador origen: chrome (default) o edge', 'chrome')
+  .option('-f, --force', 'Sobreescribir sesiones existentes', false)
+  .action(async (options) => {
+    logger.info('Importando sesiones de navegador...\n');
+
+    // Cargar configuración para saber qué proveedores están activos
+    const userConfig = ConfigManager.loadConfig();
+    let providersToImport: string[] = [];
+
+    if (userConfig) {
+      providersToImport = [userConfig.leader, ...(userConfig.workers || [])];
+      // Eliminar duplicados
+      providersToImport = [...new Set(providersToImport)];
+    } else {
+      // Si no hay configuración, importar todos los proveedores
+      providersToImport = DriverFactory.getAllProviders().map(p => p.id);
+    }
+
+    console.log(pc.cyan(`📋 Proveedores a importar: ${providersToImport.join(', ')}`));
+    console.log(pc.dim(`   Navegador origen: ${options.browser}\n`));
+
+    const results = importSessionsFromBrowser(providersToImport, options.browser, options.force);
+
+    console.log(pc.bold('📦 Resultados:\n'));
+    let imported = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (const r of results) {
+      if (r.provider === '*') {
+        // Error general
+        console.log(pc.red(`  ✖ ${r.message}`));
+        failed++;
+        continue;
+      }
+
+      if (r.skipped) {
+        console.log(pc.yellow(`  ⏭ ${r.provider}: ${r.message}`));
+        skipped++;
+      } else if (r.success) {
+        console.log(pc.green(`  ✓ ${r.provider}: ${r.message}`));
+        imported++;
+      } else {
+        console.log(pc.red(`  ✖ ${r.provider}: ${r.message}`));
+        failed++;
+      }
+    }
+
+    console.log(`\n${pc.bold('Resumen:')} ${pc.green(`${imported} importadas`)}, ${pc.yellow(`${skipped} omitidas`)}, ${pc.red(`${failed} fallidas`)}\n`);
+
+    if (imported > 0) {
+      console.log(pc.dim('Nota: Asegúrate de que el navegador estuvo cerrado durante la importación para evitar archivos bloqueados.'));
+      console.log(pc.dim('Si alguna sesión no funciona, ejecuta: barhel login <proveedor>\n'));
+    }
+
+    process.exit(0);
+  });
+
+// Subcomando: Borrar sesiones de proveedores
+program
+  .command('clear-sessions')
+  .alias('clear')
+  .description('Borra las sesiones de autenticación de los proveedores')
+  .option('-p, --provider <name>', 'Borrar solo un proveedor específico (deepseek, chatgpt, gemini, etc.)')
+  .option('-a, --all', 'Borrar todas las sesiones de todos los proveedores', false)
+  .action(async (options) => {
+    logger.info('Gestión de sesiones de autenticación\n');
+
+    const providersToDelete: string[] = [];
+
+    if (options.all) {
+      // Borrar todos los proveedores
+      providersToDelete.push(...DriverFactory.getAllProviders().map(p => p.id));
+    } else if (options.provider) {
+      providersToDelete.push(options.provider.toLowerCase().trim());
+    } else {
+      // Borrar solo proveedores configurados
+      const userConfig = ConfigManager.loadConfig();
+      if (userConfig) {
+        providersToDelete.push(userConfig.leader, ...(userConfig.workers || []));
+      } else {
+        providersToDelete.push(...DriverFactory.getAllProviders().map(p => p.id));
+      }
+      // Eliminar duplicados
+      const unique = [...new Set(providersToDelete)];
+      providersToDelete.length = 0;
+      providersToDelete.push(...unique);
+    }
+
+    console.log(pc.cyan(`📋 Sesiones a borrar: ${providersToDelete.join(', ')}\n`));
+
+    let deleted = 0;
+    let notFound = 0;
+
+    for (const providerId of providersToDelete) {
+      const normalized = providerId.toLowerCase().trim();
+      const sessionDir = path.join(os.homedir(), '.dev-agent-sessions', normalized);
+
+      if (!fs.existsSync(sessionDir)) {
+        console.log(pc.yellow(`  ⏭ ${normalized}: no existe, omitido.`));
+        notFound++;
+        continue;
+      }
+
+      try {
+        fs.rmSync(sessionDir, { recursive: true, force: true });
+        console.log(pc.green(`  ✓ ${normalized}: sesión eliminada.`));
+        deleted++;
+      } catch (err: any) {
+        console.log(pc.red(`  ✖ ${normalized}: error al eliminar - ${err.message}`));
+      }
+    }
+
+    console.log(`\n${pc.bold('Resumen:')} ${pc.green(`${deleted} eliminadas`)}, ${pc.yellow(`${notFound} no encontradas`)}\n`);
+
+    if (deleted > 0) {
+      console.log(pc.dim('Las sesiones se recrearán automáticamente al iniciar barhel.'));
+      console.log(pc.dim('Puedes re-importar con: barhel import-sessions\n'));
+    }
+
+    process.exit(0);
   });
 
 // Subcomando: Estado de perfiles de autenticación

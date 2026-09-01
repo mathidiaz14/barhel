@@ -48,6 +48,8 @@ const AVAILABLE_SLASH_COMMANDS = [
   { name: '/summarize', desc: 'Genera y muestra el resumen de memoria de la sesion' },
   { name: '/leader', desc: 'Cambia el modelo lider rapidamente', needsArg: 'Nombre del modelo:' },
   { name: '/login', desc: 'Inicia sesion en la interfaz web de un proveedor' },
+  { name: '/import-sessions', desc: 'Importa sesiones de Chrome/Edge a los perfiles de barhel', aliases: ['/import'] },
+  { name: '/clear-sessions', desc: 'Borra las sesiones de autenticación de los proveedores', aliases: ['/clear-sessions'] },
   { name: '/clear', desc: 'Limpia la pantalla de la terminal' },
   { name: '/help', desc: 'Muestra la lista de todos los comandos y ayuda' },
   { name: '/exit', desc: 'Cierra Barhel y guarda la sesion', aliases: ['/quit'] },
@@ -541,6 +543,96 @@ export async function startInteractiveChat(options: CLIOptions = {}): Promise<vo
           }
         } catch (loginErr) {
           logger.error(`Error al iniciar sesion para ${target}`, loginErr);
+        }
+        break;
+      }
+
+      case '/import-sessions':
+      case '/import': {
+        console.log(pc.cyan('\nImportando sesiones de Chrome/Edge...\n'));
+
+        const userConfig = ConfigManager.loadConfig();
+        let providersToImport: string[] = [];
+
+        if (userConfig) {
+          providersToImport = [userConfig.leader, ...(userConfig.workers || [])];
+          providersToImport = [...new Set(providersToImport)];
+        } else {
+          providersToImport = DriverFactory.getAllProviders().map(p => p.id);
+        }
+
+        console.log(pc.dim(`Proveedores: ${providersToImport.join(', ')}`));
+        console.log(pc.dim('Navegador: chrome\n'));
+
+        const { importSessionsFromBrowser } = await import('../utils/session.js');
+        const results = importSessionsFromBrowser(providersToImport, 'chrome', false);
+
+        let imported = 0;
+        let skipped = 0;
+        let failed = 0;
+
+        for (const r of results) {
+          if (r.provider === '*') {
+            console.log(pc.red(`  ✖ ${r.message}`));
+            failed++;
+          } else if (r.skipped) {
+            console.log(pc.yellow(`  ⏭ ${r.provider}: ${r.message}`));
+            skipped++;
+          } else if (r.success) {
+            console.log(pc.green(`  ✓ ${r.provider}: ${r.message}`));
+            imported++;
+          } else {
+            console.log(pc.red(`  ✖ ${r.provider}: ${r.message}`));
+            failed++;
+          }
+        }
+
+        console.log(`\n${pc.bold('Resumen:')} ${pc.green(`${imported} importadas`)}, ${pc.yellow(`${skipped} omitidas`)}, ${pc.red(`${failed} fallidas`)}\n`);
+        break;
+      }
+
+      case '/clear-sessions': {
+        console.log(pc.cyan('\nBorrando sesiones de autenticación...\n'));
+
+        const clearConfig = ConfigManager.loadConfig();
+        let providersToDelete: string[] = [];
+
+        if (clearConfig) {
+          providersToDelete = [clearConfig.leader, ...(clearConfig.workers || [])];
+          providersToDelete = [...new Set(providersToDelete)];
+        } else {
+          providersToDelete = DriverFactory.getAllProviders().map(p => p.id);
+        }
+
+        console.log(pc.dim(`Proveedores: ${providersToDelete.join(', ')}\n`));
+
+        let deleted = 0;
+        let notFound = 0;
+
+        for (const providerId of providersToDelete) {
+          const normalized = providerId.toLowerCase().trim();
+          const sessionDir = path.join(os.homedir(), '.dev-agent-sessions', normalized);
+
+          if (!fs.existsSync(sessionDir)) {
+            console.log(pc.yellow(`  ⏭ ${normalized}: no existe, omitido.`));
+            notFound++;
+            continue;
+          }
+
+          try {
+            fs.rmSync(sessionDir, { recursive: true, force: true });
+            console.log(pc.green(`  ✓ ${normalized}: sesión eliminada.`));
+            deleted++;
+          } catch (err: any) {
+            console.log(pc.red(`  ✖ ${normalized}: error al eliminar - ${err.message}`));
+          }
+        }
+
+        console.log(`\n${pc.bold('Resumen:')} ${pc.green(`${deleted} eliminadas`)}, ${pc.yellow(`${notFound} no encontradas`)}\n`);
+
+        if (deleted > 0) {
+          console.log(pc.dim('Las sesiones se recrearán automáticamente al iniciar barhel.'));
+          console.log(pc.dim('Puedes re-importar con: /import-sessions\n'));
         }
         break;
       }

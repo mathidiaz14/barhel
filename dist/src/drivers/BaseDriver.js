@@ -74,9 +74,83 @@ export class BaseDriver {
             const msg = String(err?.message || '');
             return msg.includes('sandbox') || msg.includes('Sandbox') || msg.includes('sandboxing');
         };
-        const doLaunch = async (options) => {
+        const isProfileCorruptionError = (err) => {
+            const msg = String(err?.message || '');
+            return (msg.includes('Target page, context or browser has been closed') ||
+                msg.includes('browser has been closed') ||
+                msg.includes('Session deleted') ||
+                msg.includes('crashed'));
+        };
+        const killStaleBrowserProcesses = async () => {
+            const { execFile } = await import('node:child_process');
+            const { promisify } = await import('node:util');
+            const execFileAsync = promisify(execFile);
             try {
-                return await chromium.launchPersistentContext(sessionDir, {
+                if (process.platform === 'win32') {
+                    // Obtener PIDs de procesos Chrome que usen nuestro directorio de sesión
+                    const escapedDir = sessionDir.replace(/\\/g, '\\\\').replace(/'/g, "''");
+                    const { stdout } = await execFileAsync('powershell.exe', [
+                        '-NoProfile',
+                        '-Command',
+                        `Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" | Where-Object { $_.CommandLine -like '*${escapedDir}*' } | ForEach-Object { $_.ProcessId }`,
+                    ]);
+                    const pids = stdout.trim().split(/\s+/).filter((p) => p.length > 0);
+                    if (pids.length > 0) {
+                        // taskkill /F /T mata el árbol completo de procesos (hijos incluidos)
+                        for (const pid of pids) {
+                            await execFileAsync('taskkill.exe', ['/F', '/T', '/PID', pid]).catch(() => { });
+                        }
+                        logger.warn(`${pids.length} procesos de navegador finalizados.`);
+                    }
+                }
+                else {
+                    const { exec } = await import('node:child_process');
+                    const { promisify: promisifyExec } = await import('node:util');
+                    const execAsync = promisifyExec(exec);
+                    await execAsync(`pkill -f "${sessionDir}"`).catch(() => { });
+                }
+                // Esperar a que el sistema libere los locks de archivos
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+            }
+            catch {
+                // Si no se pueden listar/finalizar procesos, continuar de todos modos
+            }
+        };
+        const cleanSessionDir = async () => {
+            await killStaleBrowserProcesses();
+            const { rm } = await import('node:fs/promises');
+            // Reintentar la eliminación completa del directorio hasta 3 veces
+            for (let attempt = 1; attempt <= 3; attempt++) {
+                try {
+                    await rm(sessionDir, { recursive: true, force: true });
+                    logger.warn(`Directorio de sesión eliminado: ${sessionDir}`);
+                    return;
+                }
+                catch {
+                    if (attempt < 3) {
+                        await new Promise((resolve) => setTimeout(resolve, 1000));
+                        await killStaleBrowserProcesses();
+                    }
+                }
+            }
+            // Si la eliminación completa falla, limpiar el contenido como respaldo
+            const { readdir } = await import('node:fs/promises');
+            const { join } = await import('node:path');
+            try {
+                const entries = await readdir(sessionDir);
+                for (const entry of entries) {
+                    await rm(join(sessionDir, entry), { recursive: true, force: true }).catch(() => { });
+                }
+                logger.warn(`Contenido del directorio de sesión limpiado: ${sessionDir}`);
+            }
+            catch {
+                // Si no se puede limpiar, ignorar
+            }
+        };
+        const doLaunch = async (options, overrideSessionDir) => {
+            const targetDir = overrideSessionDir || sessionDir;
+            try {
+                return await chromium.launchPersistentContext(targetDir, {
                     ...options,
                     channel: 'chrome',
                 });
@@ -85,7 +159,7 @@ export class BaseDriver {
                 if (isSandboxError(err))
                     throw err;
                 try {
-                    return await chromium.launchPersistentContext(sessionDir, {
+                    return await chromium.launchPersistentContext(targetDir, {
                         ...options,
                         channel: 'msedge',
                     });
@@ -93,7 +167,7 @@ export class BaseDriver {
                 catch (err2) {
                     if (isSandboxError(err2))
                         throw err2;
-                    return await chromium.launchPersistentContext(sessionDir, options);
+                    return await chromium.launchPersistentContext(targetDir, options);
                 }
             }
         };
@@ -114,7 +188,31 @@ export class BaseDriver {
                 this.context = await doLaunch(launchOptions);
             }
             catch (err) {
-                if (isSandboxError(err)) {
+                if (isProfileCorruptionError(err)) {
+                    logger.warn('Posible corrupción de perfil detectada. Usando directorio de sesión temporal...');
+                    // Usar un directorio temporal para evitar problemas de locks de archivos.
+                    // Chrome regenera la estructura completa en el primer lanzamiento.
+                    const { join } = await import('node:path');
+                    const tempSessionDir = join(sessionDir + '-tmp-' + Date.now());
+                    try {
+                        await killStaleBrowserProcesses();
+                        this.context = await doLaunch(launchOptions, tempSessionDir);
+                    }
+                    catch (retryErr) {
+                        if (isSandboxError(retryErr)) {
+                            const fallbackOptions = {
+                                ...launchOptions,
+                                ignoreDefaultArgs: ['--enable-automation'],
+                                args: [...launchOptions.args, '--no-sandbox', '--disable-setuid-sandbox'],
+                            };
+                            this.context = await doLaunch(fallbackOptions, tempSessionDir);
+                        }
+                        else {
+                            throw retryErr;
+                        }
+                    }
+                }
+                else if (isSandboxError(err)) {
                     logger.warn('Detección de fallo de sandbox de Chromium. Reintentando sin sandbox...');
                     const fallbackOptions = {
                         ...launchOptions,

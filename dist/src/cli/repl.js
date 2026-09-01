@@ -46,6 +46,7 @@ const AVAILABLE_SLASH_COMMANDS = [
     { name: '/summarize', desc: 'Genera y muestra el resumen de memoria de la sesion' },
     { name: '/leader', desc: 'Cambia el modelo lider rapidamente', needsArg: 'Nombre del modelo:' },
     { name: '/login', desc: 'Inicia sesion en la interfaz web de un proveedor' },
+    { name: '/import-sessions', desc: 'Importa sesiones de Chrome/Edge a los perfiles de barhel', aliases: ['/import'] },
     { name: '/clear', desc: 'Limpia la pantalla de la terminal' },
     { name: '/help', desc: 'Muestra la lista de todos los comandos y ayuda' },
     { name: '/exit', desc: 'Cierra Barhel y guarda la sesion', aliases: ['/quit'] },
@@ -517,6 +518,46 @@ export async function startInteractiveChat(options = {}) {
                 catch (loginErr) {
                     logger.error(`Error al iniciar sesion para ${target}`, loginErr);
                 }
+                break;
+            }
+            case '/import-sessions':
+            case '/import': {
+                console.log(pc.cyan('\nImportando sesiones de Chrome/Edge...\n'));
+                const userConfig = ConfigManager.loadConfig();
+                let providersToImport = [];
+                if (userConfig) {
+                    providersToImport = [userConfig.leader, ...(userConfig.workers || [])];
+                    providersToImport = [...new Set(providersToImport)];
+                }
+                else {
+                    providersToImport = DriverFactory.getAllProviders().map(p => p.id);
+                }
+                console.log(pc.dim(`Proveedores: ${providersToImport.join(', ')}`));
+                console.log(pc.dim('Navegador: chrome\n'));
+                const { importSessionsFromBrowser } = await import('../utils/session.js');
+                const results = importSessionsFromBrowser(providersToImport, 'chrome', false);
+                let imported = 0;
+                let skipped = 0;
+                let failed = 0;
+                for (const r of results) {
+                    if (r.provider === '*') {
+                        console.log(pc.red(`  ✖ ${r.message}`));
+                        failed++;
+                    }
+                    else if (r.skipped) {
+                        console.log(pc.yellow(`  ⏭ ${r.provider}: ${r.message}`));
+                        skipped++;
+                    }
+                    else if (r.success) {
+                        console.log(pc.green(`  ✓ ${r.provider}: ${r.message}`));
+                        imported++;
+                    }
+                    else {
+                        console.log(pc.red(`  ✖ ${r.provider}: ${r.message}`));
+                        failed++;
+                    }
+                }
+                console.log(`\n${pc.bold('Resumen:')} ${pc.green(`${imported} importadas`)}, ${pc.yellow(`${skipped} omitidas`)}, ${pc.red(`${failed} fallidas`)}\n`);
                 break;
             }
             case '/clear':

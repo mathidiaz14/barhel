@@ -8,7 +8,7 @@ import { Orchestrator } from '../src/engine/Orchestrator.js';
 import { DriverFactory } from '../src/drivers/DriverFactory.js';
 import { ConfigManager } from '../src/utils/config.js';
 import { HistoryManager } from '../src/utils/history.js';
-import { listSessionsStatus, getSessionBasePath } from '../src/utils/session.js';
+import { listSessionsStatus, getSessionBasePath, importSessionsFromBrowser } from '../src/utils/session.js';
 import { logger } from '../src/utils/logger.js';
 import { execSync } from 'node:child_process';
 import { getBarhelVersion } from '../src/utils/version.js';
@@ -176,6 +176,61 @@ program
         logger.error(`Error durante el proceso de login para "${target}"`, err);
         process.exit(1);
     }
+});
+// Subcomando: Importar sesiones de Chrome/Edge a los perfiles de barhel
+program
+    .command('import-sessions')
+    .alias('import')
+    .description('Importa sesiones de Chrome/Edge a los perfiles de barhel para proveedores configurados')
+    .option('-b, --browser <name>', 'Navegador origen: chrome (default) o edge', 'chrome')
+    .option('-f, --force', 'Sobreescribir sesiones existentes', false)
+    .action(async (options) => {
+    logger.info('Importando sesiones de navegador...\n');
+    // Cargar configuración para saber qué proveedores están activos
+    const userConfig = ConfigManager.loadConfig();
+    let providersToImport = [];
+    if (userConfig) {
+        providersToImport = [userConfig.leader, ...(userConfig.workers || [])];
+        // Eliminar duplicados
+        providersToImport = [...new Set(providersToImport)];
+    }
+    else {
+        // Si no hay configuración, importar todos los proveedores
+        providersToImport = DriverFactory.getAllProviders().map(p => p.id);
+    }
+    console.log(pc.cyan(`📋 Proveedores a importar: ${providersToImport.join(', ')}`));
+    console.log(pc.dim(`   Navegador origen: ${options.browser}\n`));
+    const results = importSessionsFromBrowser(providersToImport, options.browser, options.force);
+    console.log(pc.bold('📦 Resultados:\n'));
+    let imported = 0;
+    let skipped = 0;
+    let failed = 0;
+    for (const r of results) {
+        if (r.provider === '*') {
+            // Error general
+            console.log(pc.red(`  ✖ ${r.message}`));
+            failed++;
+            continue;
+        }
+        if (r.skipped) {
+            console.log(pc.yellow(`  ⏭ ${r.provider}: ${r.message}`));
+            skipped++;
+        }
+        else if (r.success) {
+            console.log(pc.green(`  ✓ ${r.provider}: ${r.message}`));
+            imported++;
+        }
+        else {
+            console.log(pc.red(`  ✖ ${r.provider}: ${r.message}`));
+            failed++;
+        }
+    }
+    console.log(`\n${pc.bold('Resumen:')} ${pc.green(`${imported} importadas`)}, ${pc.yellow(`${skipped} omitidas`)}, ${pc.red(`${failed} fallidas`)}\n`);
+    if (imported > 0) {
+        console.log(pc.dim('Nota: Asegúrate de que el navegador estuvo cerrado durante la importación para evitar archivos bloqueados.'));
+        console.log(pc.dim('Si alguna sesión no funciona, ejecuta: barhel login <proveedor>\n'));
+    }
+    process.exit(0);
 });
 // Subcomando: Estado de perfiles de autenticación
 program

@@ -75,6 +75,38 @@ barhel login all
 
 > **¿Cómo funciona?** Se abrirá una ventana de Chromium. Inicia sesión en la plataforma y pulsa **Enter** en tu terminal. Las cookies y el almacenamiento de sesión se guardarán de forma segura en `~/.dev-agent-sessions/`.
 
+### Importar Sesiones Existentes (`barhel import-sessions`)
+
+Si ya tienes sesión iniciada en Chrome o Edge, puedes importarlas automáticamente sin tener que loguearte de nuevo:
+
+```bash
+# Importar desde Chrome (default)
+barhel import-sessions
+
+# Importar desde Edge
+barhel import-sessions --browser edge
+
+# Sobreescribir sesiones existentes
+barhel import-sessions --force
+```
+
+> **Importante:** Cierra el navegador antes de importar para evitar archivos bloqueados.
+
+### Borrar Sesiones (`barhel clear-sessions`)
+
+Para eliminar las sesiones guardadas y empezar de cero:
+
+```bash
+# Borrar sesiones de proveedores configurados
+barhel clear-sessions
+
+# Borrar un proveedor específico
+barhel clear-sessions --provider gemini
+
+# Borrar todas las sesiones
+barhel clear-sessions --all
+```
+
 ---
 
 ## ⚙️ Configuración de Modelos (`barhel config`)
