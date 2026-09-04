@@ -300,9 +300,12 @@ export class BaseDriver {
         }
     }
     /**
-     * Abre la URL del proveedor y permite al usuario autenticarse manualmente
+     * Abre la URL del proveedor y permite al usuario autenticarse manualmente.
+     * En modo consola (waitForEnter=true) espera Enter en terminal antes de cerrar.
+     * En modo web (waitForEnter=false) deja el navegador abierto para que el
+     * controlador lo cierre más tarde (la sesión persiste en el perfil).
      */
-    async login() {
+    async login(waitForEnter = true) {
         logger.info(`Iniciando sesión interactiva para ${this.config.displayName}...`);
         await this.init(false); // Siempre visible
         if (!this.page)
@@ -311,6 +314,10 @@ export class BaseDriver {
         await this.page.bringToFront();
         logger.success(`Navegador abierto en ${this.config.url}`);
         logger.info(`Por favor inicia sesión en la ventana del navegador. Una vez completado y estés en el chat, presiona Enter en este terminal para guardar la sesión.`);
+        if (!waitForEnter) {
+            // Modo web: no esperamos stdin; el controlador cierra el navegador cuando convenga.
+            return;
+        }
         // Esperar a que el usuario presione Enter en terminal
         await new Promise((resolve) => {
             process.stdin.resume();

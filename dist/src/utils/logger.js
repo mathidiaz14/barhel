@@ -1,21 +1,35 @@
 import pc from 'picocolors';
 import { startSpinner as startSharedSpinner, stopSpinner as stopSharedSpinner } from './spinner.js';
+import { EventBus } from '../web/EventBus.js';
+import { SessionContext } from '../web/SessionContext.js';
 class Logger {
     info(message, prefix = 'INFO') {
         this.stopSpinner();
         console.log(`${pc.cyan(pc.bold(`[${prefix}]`))} ${message}`);
+        const sid = SessionContext.getCurrent();
+        if (sid)
+            EventBus.emit(sid, 'system', { level: 'info', message });
     }
     success(message) {
         this.stopSpinner();
         console.log(`${pc.green(pc.bold('✓'))} ${message}`);
+        const sid = SessionContext.getCurrent();
+        if (sid)
+            EventBus.emit(sid, 'system', { level: 'success', message });
     }
     warn(message) {
         this.stopSpinner();
         console.log(`${pc.yellow(pc.bold('⚠'))} ${message}`);
+        const sid = SessionContext.getCurrent();
+        if (sid)
+            EventBus.emit(sid, 'system', { level: 'warn', message });
     }
     error(message, error) {
         this.stopSpinner();
         console.log(`${pc.red(pc.bold('✖'))} ${message}`);
+        const sid = SessionContext.getCurrent();
+        if (sid)
+            EventBus.emit(sid, 'error', { message, error: error instanceof Error ? error.message : String(error ?? '') });
         if (error) {
             if (error instanceof Error) {
                 console.error(pc.red(error.stack || error.message));

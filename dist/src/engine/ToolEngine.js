@@ -678,8 +678,6 @@ export class ToolEngine {
                 console.log(`  ${pc.gray('│')} ${isErr ? pc.red(l) : pc.dim(l)}`);
             }
         }
-        const badge = result.success ? pc.green(`✓ PASARON (${result.durationMs}ms)`) : pc.red(`✖ FALLARON (${result.durationMs}ms)`);
-        console.log(pc.gray(`  └─ ${badge} ───────────────────────────────────────────\n`));
         return {
             success: result.success,
             output: `[RESULTADO PRUEBAS DEL PROYECTO (${result.success ? 'PASARON ✓' : 'FALLARON ✖'} - ${result.durationMs}ms)]:\n${result.output}`,

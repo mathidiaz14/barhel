@@ -10,6 +10,8 @@ import { gitCommit, gitDiff, gitStatus } from '../utils/git.js';
 import { TUI } from '../cli/tui.js';
 import { ProgressSupervisor } from './ProgressSupervisor.js';
 import { SkillManager } from '../skills/SkillManager.js';
+import { EventBus } from '../web/EventBus.js';
+import { SessionContext } from '../web/SessionContext.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import pc from 'picocolors';
@@ -80,6 +82,17 @@ export class Orchestrator {
                 workers: this.activeWorkers,
             });
         }
+        if (this.currentSession.autonomous !== undefined) {
+            this.options.autonomous = this.currentSession.autonomous;
+            this.toolEngine.setAutonomous(this.options.autonomous);
+        }
+        if (this.currentSession.planOnly !== undefined) {
+            this.options.planOnly = this.currentSession.planOnly;
+            this.toolEngine.setPlanOnly(this.options.planOnly);
+        }
+        if (this.currentSession.thinking !== undefined) {
+            this.thinkingDisplayFull = this.currentSession.thinking;
+        }
         this.turnCount = this.currentSession.turns.length;
         this.leaderDriver = DriverFactory.createDriver(this.leaderId);
         if (this.currentSession.chatUrl) {
@@ -120,7 +133,10 @@ export class Orchestrator {
     }
     toggleAutonomous() {
         this.options.autonomous = !this.options.autonomous;
+        this.currentSession.autonomous = this.options.autonomous;
         this.toolEngine.setAutonomous(this.options.autonomous);
+        HistoryManager.saveSession(this.currentSession);
+        EventBus.emit(this.getSessionId(), 'session_meta', { autonomous: this.options.autonomous, planOnly: this.options.planOnly, thinking: this.thinkingDisplayFull });
         return this.options.autonomous;
     }
     /**
@@ -148,13 +164,17 @@ export class Orchestrator {
             autoSummarize: this.autoSummarize,
             autoCommit: this.autoCommit,
         });
+        EventBus.emit(this.getSessionId(), 'model', { modelName: this.leaderId, details: { workers: this.activeWorkers, mode: 'switch' } });
     }
     isPlanOnly() {
         return this.options.planOnly ?? false;
     }
     togglePlanOnly() {
         this.options.planOnly = !this.options.planOnly;
+        this.currentSession.planOnly = this.options.planOnly;
         this.toolEngine.setPlanOnly(this.options.planOnly ?? false);
+        HistoryManager.saveSession(this.currentSession);
+        EventBus.emit(this.getSessionId(), 'session_meta', { autonomous: this.options.autonomous, planOnly: this.options.planOnly, thinking: this.thinkingDisplayFull });
         return this.options.planOnly ?? false;
     }
     getFallbackOrder() {
@@ -191,6 +211,17 @@ export class Orchestrator {
         const status = await gitStatus(this.toolEngine.getWorkdir());
         const diff = await gitDiff(this.toolEngine.getWorkdir());
         return `[GIT STATUS]\n${status}\n\n[GIT DIFF]\n${diff}`;
+    }
+    thinkingDisplayFull = true;
+    isThinkingFull() {
+        return this.thinkingDisplayFull;
+    }
+    toggleThinkingDisplay() {
+        this.thinkingDisplayFull = !this.thinkingDisplayFull;
+        this.currentSession.thinking = this.thinkingDisplayFull;
+        HistoryManager.saveSession(this.currentSession);
+        EventBus.emit(this.getSessionId(), 'session_meta', { autonomous: this.options.autonomous, planOnly: this.options.planOnly, thinking: this.thinkingDisplayFull });
+        return this.thinkingDisplayFull;
     }
     /**
      * Cambia a una sesión guardada previa, cargando su hilo web exacto
@@ -317,11 +348,17 @@ export class Orchestrator {
         }
     }
     /**
-     * Ejecuta un turno de conversación (ReAct Loop) sin cerrar el navegador al terminar
+     * Ejecuta un turno de conversación (ReAct Loop) sin cerrar el navegador al terminar.
+     * Envuelve la ejecución en el contexto de sesión para que los eventos en vivo
+     * (TUI/logger/Progress) se asocien a esta sesión, incluso en concurrencia.
      */
     async runTurn(userGoal) {
+        await SessionContext.run(this.getSessionId(), () => this.runTurnInternal(userGoal));
+    }
+    async runTurnInternal(userGoal) {
         this.isTurnRunning = true;
         this.isInterrupted = false;
+        EventBus.emit(this.getSessionId(), 'turn_start', { message: userGoal, summary: userGoal });
         if (!this.isInitialized) {
             await this.initSession();
         }
@@ -472,6 +509,7 @@ export class Orchestrator {
                 // Manejar finalización de la tarea
                 if (action.type === 'finish') {
                     console.log(`\n${pc.green('✓')} ${pc.bold(pc.green('TAREA COMPLETADA:'))}\n${pc.white(action.summary || 'Fin del trabajo.')}\n`);
+                    EventBus.emit(this.getSessionId(), 'finish', { summary: action.summary || 'Fin del trabajo.' });
                     if (this.autoCommit && (this.options.autonomous ?? false)) {
                         await this.tryAutoCommit(action.summary);
                     }
@@ -576,8 +614,14 @@ export class Orchestrator {
                 this.currentSession.chatUrl = finalChatUrl;
             }
             HistoryManager.saveSession(this.currentSession);
+            this.currentSession.todos = this.currentTodos;
+            EventBus.emit(this.getSessionId(), 'turn_end', {
+                summary: currentTurnRecord.summary,
+                output: currentTurnRecord.summary,
+            });
             if (this.isInterrupted) {
                 console.log(pc.yellow('\n[interrupted] Generación cancelada por el usuario.\n'));
+                EventBus.emit(this.getSessionId(), 'interrupt', {});
             }
         }
     }

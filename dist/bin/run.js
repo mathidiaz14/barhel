@@ -2,6 +2,7 @@
 import { Command } from 'commander';
 import pc from 'picocolors';
 import path from 'node:path';
+import os from 'node:os';
 import fs from 'node:fs';
 import { startInteractiveChat } from '../src/cli/repl.js';
 import { Orchestrator } from '../src/engine/Orchestrator.js';
@@ -229,6 +230,64 @@ program
     if (imported > 0) {
         console.log(pc.dim('Nota: Asegúrate de que el navegador estuvo cerrado durante la importación para evitar archivos bloqueados.'));
         console.log(pc.dim('Si alguna sesión no funciona, ejecuta: barhel login <proveedor>\n'));
+    }
+    process.exit(0);
+});
+// Subcomando: Borrar sesiones de proveedores
+program
+    .command('clear-sessions')
+    .alias('clear')
+    .description('Borra las sesiones de autenticación de los proveedores')
+    .option('-p, --provider <name>', 'Borrar solo un proveedor específico (deepseek, chatgpt, gemini, etc.)')
+    .option('-a, --all', 'Borrar todas las sesiones de todos los proveedores', false)
+    .action(async (options) => {
+    logger.info('Gestión de sesiones de autenticación\n');
+    const providersToDelete = [];
+    if (options.all) {
+        // Borrar todos los proveedores
+        providersToDelete.push(...DriverFactory.getAllProviders().map(p => p.id));
+    }
+    else if (options.provider) {
+        providersToDelete.push(options.provider.toLowerCase().trim());
+    }
+    else {
+        // Borrar solo proveedores configurados
+        const userConfig = ConfigManager.loadConfig();
+        if (userConfig) {
+            providersToDelete.push(userConfig.leader, ...(userConfig.workers || []));
+        }
+        else {
+            providersToDelete.push(...DriverFactory.getAllProviders().map(p => p.id));
+        }
+        // Eliminar duplicados
+        const unique = [...new Set(providersToDelete)];
+        providersToDelete.length = 0;
+        providersToDelete.push(...unique);
+    }
+    console.log(pc.cyan(`📋 Sesiones a borrar: ${providersToDelete.join(', ')}\n`));
+    let deleted = 0;
+    let notFound = 0;
+    for (const providerId of providersToDelete) {
+        const normalized = providerId.toLowerCase().trim();
+        const sessionDir = path.join(os.homedir(), '.dev-agent-sessions', normalized);
+        if (!fs.existsSync(sessionDir)) {
+            console.log(pc.yellow(`  ⏭ ${normalized}: no existe, omitido.`));
+            notFound++;
+            continue;
+        }
+        try {
+            fs.rmSync(sessionDir, { recursive: true, force: true });
+            console.log(pc.green(`  ✓ ${normalized}: sesión eliminada.`));
+            deleted++;
+        }
+        catch (err) {
+            console.log(pc.red(`  ✖ ${normalized}: error al eliminar - ${err.message}`));
+        }
+    }
+    console.log(`\n${pc.bold('Resumen:')} ${pc.green(`${deleted} eliminadas`)}, ${pc.yellow(`${notFound} no encontradas`)}\n`);
+    if (deleted > 0) {
+        console.log(pc.dim('Las sesiones se recrearán automáticamente al iniciar barhel.'));
+        console.log(pc.dim('Puedes re-importar con: barhel import-sessions\n'));
     }
     process.exit(0);
 });
@@ -471,6 +530,28 @@ program
             console.log(pc.dim('\n[DAEMON INACTIVO] Usa: barhel daemon start\n'));
         }
     }
+});
+// Subcomando: Servidor Web (interfaz web en el puerto 78987 por defecto)
+program
+    .command('web')
+    .description('Inicia el servidor web de Barhel (interfaz en http://localhost:7898)')
+    .option('-p, --port <number>', 'Puerto del servidor web', '7898')
+    .option('-w, --workdir <path>', 'Directorio de trabajo', process.cwd())
+    .action(async (options) => {
+    const { startWebServer } = await import('../src/web/index.js');
+    const port = parseInt(options.port, 10);
+    if (isNaN(port) || port < 1 || port > 65535) {
+        logger.error('Puerto inválido. Debe ser un número entre 1 y 65535.');
+        process.exit(1);
+    }
+    const server = await startWebServer({ port, workdir: options.workdir });
+    logger.info(`Web UI: http://localhost:${port}  (presiona Ctrl+C para detener)`);
+    const stop = async () => {
+        await server.stop();
+        process.exit(0);
+    };
+    process.on('SIGINT', stop);
+    process.on('SIGTERM', stop);
 });
 program.parse(process.argv);
 //# sourceMappingURL=run.js.map

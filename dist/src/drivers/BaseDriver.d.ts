@@ -20,9 +20,12 @@ export declare abstract class BaseDriver {
      */
     init(headless?: boolean, initialChatUrl?: string): Promise<void>;
     /**
-     * Abre la URL del proveedor y permite al usuario autenticarse manualmente
+     * Abre la URL del proveedor y permite al usuario autenticarse manualmente.
+     * En modo consola (waitForEnter=true) espera Enter en terminal antes de cerrar.
+     * En modo web (waitForEnter=false) deja el navegador abierto para que el
+     * controlador lo cierre más tarde (la sesión persiste en el perfil).
      */
-    login(): Promise<void>;
+    login(waitForEnter?: boolean): Promise<void>;
     /**
      * Navega a la página del chat (o a una URL de chat específica) y espera a que esté lista
      */

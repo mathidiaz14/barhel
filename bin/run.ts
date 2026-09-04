@@ -578,4 +578,27 @@ program
     }
   });
 
+// Subcomando: Servidor Web (interfaz web en el puerto 78987 por defecto)
+program
+  .command('web')
+  .description('Inicia el servidor web de Barhel (interfaz en http://localhost:7898)')
+  .option('-p, --port <number>', 'Puerto del servidor web', '7898')
+  .option('-w, --workdir <path>', 'Directorio de trabajo', process.cwd())
+  .action(async (options) => {
+    const { startWebServer } = await import('../src/web/index.js');
+    const port = parseInt(options.port as any, 10);
+    if (isNaN(port) || port < 1 || port > 65535) {
+      logger.error('Puerto inválido. Debe ser un número entre 1 y 65535.');
+      process.exit(1);
+    }
+    const server = await startWebServer({ port, workdir: options.workdir });
+    logger.info(`Web UI: http://localhost:${port}  (presiona Ctrl+C para detener)`);
+    const stop = async () => {
+      await server.stop();
+      process.exit(0);
+    };
+    process.on('SIGINT', stop);
+    process.on('SIGTERM', stop);
+  });
+
 program.parse(process.argv);

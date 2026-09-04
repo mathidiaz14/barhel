@@ -1,6 +1,7 @@
 import readline from 'node:readline';
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
 import pc from 'picocolors';
 import { search, input as promptInput } from '@inquirer/prompts';
 import { Orchestrator } from '../engine/Orchestrator.js';

@@ -52,6 +52,9 @@ export declare class Orchestrator {
      * Repositorio: estado y diff actual
      */
     reviewGit(): Promise<string>;
+    private thinkingDisplayFull;
+    isThinkingFull(): boolean;
+    toggleThinkingDisplay(): boolean;
     /**
      * Cambia a una sesión guardada previa, cargando su hilo web exacto
      */
@@ -79,9 +82,12 @@ export declare class Orchestrator {
      */
     interruptCurrentTurn(): Promise<void>;
     /**
-     * Ejecuta un turno de conversación (ReAct Loop) sin cerrar el navegador al terminar
+     * Ejecuta un turno de conversación (ReAct Loop) sin cerrar el navegador al terminar.
+     * Envuelve la ejecución en el contexto de sesión para que los eventos en vivo
+     * (TUI/logger/Progress) se asocien a esta sesión, incluso en concurrencia.
      */
     runTurn(userGoal: string): Promise<void>;
+    private runTurnInternal;
     /**
      * Devuelve el próximo proveedor de respaldo disponible con sesión iniciada
      */

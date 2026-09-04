@@ -29,6 +29,9 @@ export interface ChatSession {
   workdir: string;
   leader: string;
   workers: string[];
+  autonomous?: boolean;
+  planOnly?: boolean;
+  thinking?: boolean;
   chatUrl?: string;
   createdAt: string;
   updatedAt: string;

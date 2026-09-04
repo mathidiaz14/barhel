@@ -11,12 +11,14 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
-    "prepublishOnly": "tsc",
+    "build": "tsc && node scripts/copy-web.mjs",
+    "prepublishOnly": "tsc && node scripts/copy-web.mjs",
     "browsers": "playwright install chromium",
     "start": "node dist/bin/run.js",
     "dev": "tsx bin/run.ts",
     "login": "tsx bin/run.ts login",
+    "web": "tsx bin/run.ts web",
+    "web:serve": "node dist/bin/run.js web",
     "test": "node --import tsx --test test/*.test.ts"
   },
   "keywords": [
@@ -51,10 +53,12 @@
     "fast-glob": "^3.3.3",
     "ora": "^8.1.0",
     "picocolors": "^1.1.1",
-    "playwright": "^1.48.0"
+    "playwright": "^1.48.0",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@types/node": "^22.7.5",
+    "@types/ws": "^8.18.1",
     "ts-node": "^10.9.2",
     "tsx": "^4.19.1",
     "typescript": "^5.6.3"

@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Barhel Web • Multi-Model AI Coding Agent</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- SIDEBAR -->
+    <aside id="sidebar">
+      <div class="logo-block">
+        <div class="logo-wrap">
+          <div class="logo-icon">✦</div>
+          <div>
+            <div class="logo">BARHEL</div>
+            <div class="logo-sub">Autonomous AI Agent</div>
+          </div>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <button class="nav-item active" data-view="chat">
+          <span class="nav-icon">💬</span>
+          <span class="nav-label">Chat & Agent</span>
+          <span id="badge-active-chat" class="nav-pill pulse">Live</span>
+        </button>
+        <button class="nav-item" data-view="sessions">
+          <span class="nav-icon">📜</span>
+          <span class="nav-label">Sesiones</span>
+          <span id="badge-sessions-count" class="nav-pill">0</span>
+        </button>
+        <button class="nav-item" data-view="skills">
+          <span class="nav-icon">✨</span>
+          <span class="nav-label">Skills Claude</span>
+        </button>
+        <button class="nav-item" data-view="doctor">
+          <span class="nav-icon">🩺</span>
+          <span class="nav-label">Doctor Salud</span>
+        </button>
+        <button class="nav-item" data-view="workers">
+          <span class="nav-icon">👥</span>
+          <span class="nav-label">Workers Analysis</span>
+        </button>
+        <button class="nav-item" data-view="auth">
+          <span class="nav-icon">🔑</span>
+          <span class="nav-label">Login & Auth</span>
+        </button>
+        <button class="nav-item" data-view="settings">
+          <span class="nav-icon">⚙️</span>
+          <span class="nav-label">Configuración</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-system">
+        <div class="system-card">
+          <div class="system-card-header">
+            <span class="sys-title">ESTADO</span>
+            <div id="conn-status" class="conn-status-pill">
+              <span class="pulse-dot"></span>
+              <span id="conn-status-text">Conectando...</span>
+            </div>
+          </div>
+          <div class="system-meta-row">
+            <span class="meta-lbl">Líder activo:</span>
+            <span id="sys-active-leader" class="meta-val">DeepSeek</span>
+          </div>
+          <div class="system-meta-row">
+            <span class="meta-lbl">Modo Auto:</span>
+            <span id="sys-mode-auto" class="meta-val" style="color:var(--yellow)">🛡️ Seguro</span>
+          </div>
+          <div class="system-meta-row">
+            <span class="meta-lbl">Modo Plan:</span>
+            <span id="sys-mode-plan" class="meta-val" style="color:var(--text-secondary)">✏️ Escritura</span>
+          </div>
+          <div class="system-meta-row">
+            <span class="meta-lbl">Modo Think:</span>
+            <span id="sys-mode-think" class="meta-val" style="color:var(--purple)">🧠 ON</span>
+          </div>
+          <div class="system-meta-row">
+            <span class="meta-lbl">Workspace:</span>
+            <span id="sys-workdir" class="meta-val code-path">./</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="sidebar-footer">
+        <span>Barhel <span id="version">v1.0.0</span></span>
+        <button id="btn-open-palette-side" class="palette-shortcut-btn" title="Abrir Command Palette (Ctrl+K o /)">
+          <kbd>/</kbd> Comandos
+        </button>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT AREA -->
+    <main id="main">
+      <!-- CHAT VIEW -->
+      <section id="view-chat" class="view active">
+        <!-- Top Chat Header -->
+        <header class="chat-header">
+          <div class="session-info-wrap">
+            <div class="session-title-row">
+              <span class="session-hash">#</span>
+              <div id="session-title" class="session-title" title="Doble clic para editar título">Nueva sesión</div>
+              <button id="btn-edit-title" class="icon-btn-tiny" title="Renombrar sesión">✏️</button>
+            </div>
+            <div class="session-tags-row">
+              <span id="tag-session-id" class="tag-pill tag-id">ID: ---</span>
+              <span id="tag-leader-name" class="tag-pill tag-model">👑 DeepSeek</span>
+              <span id="tag-workers-count" class="tag-pill tag-workers">👥 0 Workers</span>
+              <span id="tag-mode-auto" class="tag-pill tag-mode-safe">🛡️ Modo Seguro</span>
+              <span id="tag-mode-plan" class="tag-pill tag-mode-write">✏️ Modo Escritura</span>
+              <span id="tag-mode-think" class="tag-pill tag-mode-think">🧠 Razonamiento ON</span>
+            </div>
+          </div>
+
+          <div class="header-actions">
+            <button id="btn-toggle-auto" class="btn-tool" title="Alternar modo Autónomo (sin confirmaciones) / Seguro (con confirmación)">
+              <span class="btn-icon">🤖</span> Auto: <span id="btn-auto-val">OFF</span>
+            </button>
+            <button id="btn-toggle-plan" class="btn-tool" title="Alternar modo Solo Plan (simulación sin escribir en disco)">
+              <span class="btn-icon">📋</span> Plan: <span id="btn-plan-val">OFF</span>
+            </button>
+            <button id="btn-toggle-think" class="btn-tool active-think" title="Alternar visualización de razonamiento (+ Thought)">
+              <span class="btn-icon">🧠</span> Think: <span id="btn-think-val">ON</span>
+            </button>
+            <button id="btn-open-palette" class="btn-tool highlight" title="Abrir Command Palette (/)">
+              <span class="btn-icon">✦</span> / Comandos
+            </button>
+            <button id="btn-export-session" class="btn-tool" title="Exportar sesión (Markdown/JSON)">
+              <span class="btn-icon">💾</span> Exportar
+            </button>
+            <button id="btn-new-session" class="btn-tool" title="Iniciar nueva conversación limpia">
+              <span class="btn-icon">➕</span> Nueva
+            </button>
+            <button id="btn-interrupt" class="btn-tool danger" title="Interrumpir generación actual" disabled>
+              <span class="btn-icon">⏹</span> Detener
+            </button>
+          </div>
+        </header>
+
+        <!-- Main Body: Transcript + Dashboard -->
+        <div class="chat-layout">
+          <!-- Main Transcript -->
+          <div id="transcript-container" class="transcript-container">
+            <div id="transcript" class="transcript">
+              <div class="welcome-card">
+                <div class="welcome-badge">✦ BARHEL AI AGENT</div>
+                <h1 class="welcome-title">¿En qué proyecto o tarea trabajamos hoy?</h1>
+                <p class="welcome-desc">Escribe cualquier instrucción o escribe <kbd class="inline-kbd">/</kbd> para abrir el menú de comandos interactivos (pruebas, codegraph, skills, git, diagnóstico y más).</p>
+                
+                <div class="quick-cards-grid">
+                  <div class="quick-card" data-cmd="/fix">
+                    <div class="qc-icon">⚡</div>
+                    <div class="qc-info">
+                      <div class="qc-title">/fix</div>
+                      <div class="qc-sub">Analiza y corrige errores de código</div>
+                    </div>
+                  </div>
+                  <div class="quick-card" data-cmd="/test">
+                    <div class="qc-icon">🧪</div>
+                    <div class="qc-info">
+                      <div class="qc-title">/test</div>
+                      <div class="qc-sub">Ejecuta las pruebas unitarias</div>
+                    </div>
+                  </div>
+                  <div class="quick-card" data-cmd="/graph">
+                    <div class="qc-icon">🌿</div>
+                    <div class="qc-info">
+                      <div class="qc-title">/graph</div>
+                      <div class="qc-sub">Mapa AST de arquitectura de código</div>
+                    </div>
+                  </div>
+                  <div class="quick-card" data-cmd="/doctor">
+                    <div class="qc-icon">🩺</div>
+                    <div class="qc-info">
+                      <div class="qc-title">/doctor</div>
+                      <div class="qc-sub">Diagnóstico de salud y autenticación</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Floating scroll to bottom button -->
+            <button id="btn-scroll-bottom" class="scroll-bottom-btn" title="Ir al final">↓</button>
+          </div>
+
+          <!-- Dashboard Sidebar -->
+          <aside id="dashboard" class="dashboard">
+            <!-- Progress Panel -->
+            <div class="dash-panel" id="panel-progress">
+              <div class="dash-panel-header">
+                <span class="dash-panel-title">
+                  <span class="panel-icon">📊</span> Supervisión en Vivo
+                </span>
+                <span id="progress-pct" class="progress-badge">0%</span>
+              </div>
+              <div class="progress-bar-container">
+                <div id="progress-fill" class="progress-bar-fill"></div>
+              </div>
+              <div class="dash-panel-body" id="panel-progress-body">
+                <div class="agents-list" id="agents">
+                  <div class="agent-empty">Esperando ejecución del agente...</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Todos Checklist Panel -->
+            <div class="dash-panel" id="panel-todos">
+              <div class="dash-panel-header">
+                <span class="dash-panel-title">
+                  <span class="panel-icon">📋</span> Plan de Tareas
+                </span>
+                <span id="todos-count" class="todos-badge">0/0</span>
+              </div>
+              <div class="dash-panel-body" id="todos-body">
+                <div class="todos-empty">Sin tareas en ejecución.</div>
+              </div>
+            </div>
+
+            <!-- Quick Command Launcher Panel -->
+            <div class="dash-panel" id="panel-quick-commands">
+              <div class="dash-panel-header">
+                <span class="dash-panel-title">
+                  <span class="panel-icon">⚡</span> Accesos Rápidos
+                </span>
+              </div>
+              <div class="dash-panel-body quick-actions-grid">
+                <button class="qa-btn" data-run="/fix"><span>⚡</span> Fix Errores</button>
+                <button class="qa-btn" data-run="/test"><span>🧪</span> Tests</button>
+                <button class="qa-btn" data-run="/graph"><span>🌿</span> CodeGraph</button>
+                <button class="qa-btn" data-run="/review"><span>🔍</span> Git Review</button>
+                <button class="qa-btn" data-run="/commit"><span>🐙</span> Git Commit</button>
+                <button class="qa-btn" data-run="/doctor"><span>🩺</span> Doctor</button>
+                <button class="qa-btn" data-run="/skills"><span>✨</span> Skills</button>
+                <button class="qa-btn" data-run="/summarize"><span>📝</span> Resumen</button>
+              </div>
+            </div>
+          </aside>
+        </div>
+
+        <!-- Input Area -->
+        <div class="input-area-wrapper">
+          <!-- Command chips bar -->
+          <div class="command-chips-bar">
+            <span class="chips-label">Atajos:</span>
+            <button class="chip-btn" data-insert="/fix "><span>⚡</span> /fix</button>
+            <button class="chip-btn" data-insert="/explain "><span>💡</span> /explain</button>
+            <button class="chip-btn" data-insert="/test"><span>🧪</span> /test</button>
+            <button class="chip-btn" data-insert="/graph"><span>🌿</span> /graph</button>
+            <button class="chip-btn" data-insert="/skills"><span>✨</span> /skills</button>
+            <button class="chip-btn" data-insert="/doctor"><span>🩺</span> /doctor</button>
+            <button class="chip-btn" data-insert="/review"><span>🔍</span> /review</button>
+            <button class="chip-btn" data-insert="/commit "><span>🐙</span> /commit</button>
+            <button class="chip-btn" data-insert="/summarize"><span>📝</span> /summarize</button>
+            <button class="chip-btn palette-trigger" id="btn-chip-palette"><span>✦</span> Todos (/)</button>
+          </div>
+
+          <!-- Main Input Container -->
+          <div class="input-container" id="input-container">
+            <button id="btn-trigger-slash" class="slash-trigger-btn" title="Abrir menú de comandos interactivo (/)">
+              <span>/</span>
+            </button>
+            <textarea
+              id="chat-input"
+              rows="1"
+              placeholder="Escribe una instrucción o escribe '/' para ver todas las opciones del menú..."
+              autocomplete="off"
+              spellcheck="false"
+            ></textarea>
+            <div class="input-actions">
+              <button id="btn-clear-input" class="btn-icon-input" title="Limpiar texto" hidden>✖</button>
+              <button id="btn-send" class="btn-send-main" title="Enviar instrucción (Enter)">
+                <span class="send-icon">▲</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="input-footer-helper">
+            <div id="cmd-hint" class="cmd-hint">Presiona <kbd>/</kbd> para el menú interactivo · <kbd>Enter</kbd> para enviar · <kbd>Shift+Enter</kbd> para nueva línea</div>
+            <div id="char-counter" class="char-counter">0 chars</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SESSIONS VIEW -->
+      <section id="view-sessions" class="view">
+        <div class="view-header">
+          <div>
+            <h2 class="view-title">Historial de Sesiones</h2>
+            <p class="view-subtitle">Gestiona y reanuda conversaciones pasadas guardadas con todo su contexto</p>
+          </div>
+          <div class="view-header-btns">
+            <button id="btn-create-session-alt" class="btn primary">➕ Nueva Sesión</button>
+            <button id="btn-refresh-sessions" class="btn ghost">🔄 Actualizar</button>
+          </div>
+        </div>
+        <div id="sessions-list" class="sessions-list">
+          <div class="loading-spinner">Cargando sesiones...</div>
+        </div>
+      </section>
+
+      <!-- SKILLS VIEW -->
+      <section id="view-skills" class="view">
+        <div class="view-header">
+          <div>
+            <h2 class="view-title">Skills & Extensiones Estilo Claude Code</h2>
+            <p class="view-subtitle">Instala y consulta habilidades modulares para enriquecer el comportamiento del agente</p>
+          </div>
+          <div class="view-header-btns">
+            <button id="btn-install-skill-modal" class="btn primary">📥 Instalar Skill</button>
+            <button id="btn-refresh-skills" class="btn ghost">🔄 Actualizar</button>
+          </div>
+        </div>
+        <div id="skills-list" class="skills-grid">
+          <div class="loading-spinner">Cargando skills...</div>
+        </div>
+      </section>
+
+      <!-- DOCTOR VIEW -->
+      <section id="view-doctor" class="view">
+        <div class="view-header">
+          <div>
+            <h2 class="view-title">Diagnóstico de Salud (Doctor)</h2>
+            <p class="view-subtitle">Verifica el estado de autenticación, Cloudflare CAPTCHA y selectores UI en vivo</p>
+          </div>
+          <div class="view-header-btns">
+            <button id="btn-run-doctor" class="btn primary">🩺 Ejecutar Diagnóstico Completo</button>
+          </div>
+        </div>
+        <div id="doctor-results" class="doctor-results-container">
+          <div class="empty-state-box">
+            <div class="es-icon">🩺</div>
+            <div class="es-title">Diagnóstico profundo del sistema</div>
+            <p class="es-desc">Haz clic en "Ejecutar Diagnóstico Completo" o escribe <kbd>/doctor</kbd> en el chat para inspeccionar los navegadores Playwright y los proveedores LLM.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- WORKERS VIEW -->
+      <section id="view-workers" class="view">
+        <div class="view-header">
+          <div>
+            <h2 class="view-title">Inspector de Agentes Secundarios (Workers)</h2>
+            <p class="view-subtitle">Historial de sub-tareas delegadas y respuestas generadas por los modelos secundarios</p>
+          </div>
+          <div class="view-header-btns">
+            <button id="btn-refresh-workers" class="btn ghost">🔄 Actualizar</button>
+          </div>
+        </div>
+        <div id="workers-list" class="workers-grid">
+          <div class="empty-state-box">
+            <div class="es-icon">👥</div>
+            <div class="es-title">Sin análisis de workers todavía</div>
+            <p class="es-desc">Cuando el agente Líder delegue sub-tareas a workers (ChatGPT, Gemini, DeepSeek), aquí verás el detalle verbatim de sus respuestas.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- AUTH VIEW -->
+      <section id="view-auth" class="view">
+        <div class="view-header">
+          <div>
+            <h2 class="view-title">Autenticación de Proveedores</h2>
+            <p class="view-subtitle">Inicia sesión en tus cuentas web para dotar a Barhel de modelos ilimitados sin API keys</p>
+          </div>
+          <div class="view-header-btns">
+            <button id="btn-import-browser-sessions" class="btn ghost" title="Importar cookies de Chrome/Edge">🔄 Importar desde Chrome</button>
+          </div>
+        </div>
+
+        <div class="section-badge-title">Estado de Sesiones Almacenadas</div>
+        <div id="auth-status" class="auth-grid">Cargando...</div>
+
+        <div class="section-badge-title" style="margin-top: 24px;">Iniciar Sesión en Navegador</div>
+        <div id="login-providers" class="auth-grid"></div>
+
+        <div id="login-confirm-area" class="login-confirm-box" hidden>
+          <div class="login-confirm-header">
+            <span class="pulse-dot"></span>
+            <strong>Ventana de navegador abierta para login</strong>
+          </div>
+          <p class="login-confirm-text">Inicia sesión con tu cuenta en la ventana que se abrió. Cuando veas la pantalla principal del chat:</p>
+          <div class="login-btns">
+            <button id="login-save" class="btn primary">💾 Guardar y Finalizar Sesión</button>
+            <button id="login-cancel" class="btn ghost">✖ Cancelar</button>
+          </div>
+        </div>
+        <div id="login-result" class="login-result-msg"></div>
+      </section>
+
+      <!-- SETTINGS VIEW -->
+      <section id="view-settings" class="view">
+        <div class="view-header">
+          <div>
+            <h2 class="view-title">Configuración de Modelos y Agente</h2>
+            <p class="view-subtitle">Personaliza el modelo Líder, los Workers de soporte y el comportamiento de Barhel</p>
+          </div>
+        </div>
+        <div id="settings-form" class="settings-form-box">Cargando...</div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ══════════════════ MODALES INTERACTIVOS ══════════════════ -->
+
+  <!-- COMMAND PALETTE MODAL (ACTIVADO CON /) -->
+  <div id="command-palette-overlay" class="modal-backdrop" hidden>
+    <div class="command-palette-modal">
+      <div class="palette-header">
+        <div class="palette-search-wrap">
+          <span class="palette-search-icon">✦</span>
+          <input
+            type="text"
+            id="palette-search-input"
+            class="palette-search-input"
+            placeholder="Buscar comando de Barhel o escribe '/' (ej: /fix, /test, /graph, /doctor)..."
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button id="btn-palette-close" class="palette-close-btn" title="Cerrar (Esc)">Esc</button>
+        </div>
+
+        <!-- Category filter chips -->
+        <div class="palette-categories" id="palette-categories">
+          <button class="cat-pill active" data-cat="all">Todos</button>
+          <button class="cat-pill" data-cat="agent">🤖 Agente</button>
+          <button class="cat-pill" data-cat="tools">🧪 Tools & Testing</button>
+          <button class="cat-pill" data-cat="architecture">🌿 Arquitectura</button>
+          <button class="cat-pill" data-cat="git">🐙 Git</button>
+          <button class="cat-pill" data-cat="session">📦 Sesión</button>
+          <button class="cat-pill" data-cat="diagnosis">🩺 Diagnóstico</button>
+          <button class="cat-pill" data-cat="settings">⚙️ Config</button>
+        </div>
+      </div>
+
+      <div class="palette-body" id="palette-list">
+        <!-- Generado dinámicamente -->
+      </div>
+
+      <div class="palette-footer">
+        <div class="palette-shortcuts">
+          <span><kbd>↑</kbd><kbd>↓</kbd> Navegar</span>
+          <span><kbd>↵</kbd> Ejecutar / Seleccionar</span>
+          <span><kbd>Tab</kbd> Autocompletar</span>
+          <span><kbd>Esc</kbd> Cerrar</span>
+        </div>
+        <div id="palette-count" class="palette-count">31 comandos</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EXPORT SESSION MODAL -->
+  <div id="export-modal-overlay" class="modal-backdrop" hidden>
+    <div class="generic-modal">
+      <div class="modal-header">
+        <div class="modal-title">💾 Exportar Sesión</div>
+        <button class="modal-close" data-modal="export-modal-overlay">✕</button>
+      </div>
+      <div class="modal-body">
+        <p>Elige el formato en el que deseas exportar y descargar el historial completo de esta sesión:</p>
+        <div class="export-options-grid">
+          <div class="export-option-card" id="btn-export-md">
+            <div class="eoc-icon">📝</div>
+            <div class="eoc-title">Markdown (.md)</div>
+            <div class="eoc-desc">Documento legible con formato de texto, pensamientos y código</div>
+          </div>
+          <div class="export-option-card" id="btn-export-json">
+            <div class="eoc-icon">📦</div>
+            <div class="eoc-title">JSON (.json)</div>
+            <div class="eoc-desc">Datos estructurados de todos los turnos, tareas y herramientas</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- INSTALL SKILL MODAL -->
+  <div id="install-skill-overlay" class="modal-backdrop" hidden>
+    <div class="generic-modal">
+      <div class="modal-header">
+        <div class="modal-title">📥 Instalar Skill Estilo Claude Code</div>
+        <button class="modal-close" data-modal="install-skill-overlay">✕</button>
+      </div>
+      <div class="modal-body">
+        <p>Ingresa la URL del archivo <code>SKILL.md</code> o del repositorio GitHub con la habilidad:</p>
+        <input type="text" id="skill-url-input" class="generic-input" placeholder="https://github.com/usuario/repo/blob/main/SKILL.md" />
+        <div id="skill-install-status" class="status-box" hidden></div>
+        <div class="modal-actions" style="margin-top: 16px;">
+          <button id="btn-submit-install-skill" class="btn primary">Instalar Skill</button>
+          <button class="btn ghost modal-close" data-modal="install-skill-overlay">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VIEW SKILL DETAILS MODAL -->
+  <div id="view-skill-overlay" class="modal-backdrop" hidden>
+    <div class="generic-modal large">
+      <div class="modal-header">
+        <div id="modal-skill-title" class="modal-title">Skill</div>
+        <button class="modal-close" data-modal="view-skill-overlay">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="modal-skill-meta" class="skill-meta-tags"></div>
+        <div class="skill-instructions-box">
+          <pre id="modal-skill-instructions"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATIONS CONTAINER -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

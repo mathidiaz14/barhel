@@ -1,26 +1,36 @@
 import pc from 'picocolors';
 import ora, { Ora } from 'ora';
 import { startSpinner as startSharedSpinner, stopSpinner as stopSharedSpinner } from './spinner.js';
+import { EventBus } from '../web/EventBus.js';
+import { SessionContext } from '../web/SessionContext.js';
 
 class Logger {
   public info(message: string, prefix = 'INFO'): void {
     this.stopSpinner();
     console.log(`${pc.cyan(pc.bold(`[${prefix}]`))} ${message}`);
+    const sid = SessionContext.getCurrent();
+    if (sid) EventBus.emit(sid, 'system', { level: 'info', message });
   }
 
   public success(message: string): void {
     this.stopSpinner();
     console.log(`${pc.green(pc.bold('✓'))} ${message}`);
+    const sid = SessionContext.getCurrent();
+    if (sid) EventBus.emit(sid, 'system', { level: 'success', message });
   }
 
   public warn(message: string): void {
     this.stopSpinner();
     console.log(`${pc.yellow(pc.bold('⚠'))} ${message}`);
+    const sid = SessionContext.getCurrent();
+    if (sid) EventBus.emit(sid, 'system', { level: 'warn', message });
   }
 
   public error(message: string, error?: unknown): void {
     this.stopSpinner();
     console.log(`${pc.red(pc.bold('✖'))} ${message}`);
+    const sid = SessionContext.getCurrent();
+    if (sid) EventBus.emit(sid, 'error', { message, error: error instanceof Error ? error.message : String(error ?? '') });
     if (error) {
       if (error instanceof Error) {
         console.error(pc.red(error.stack || error.message));

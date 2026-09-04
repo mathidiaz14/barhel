@@ -8,6 +8,8 @@ import { getBarhelVersion } from '../utils/version.js';
 import { DualPane } from './DualPane.js';
 import { TodoItem } from '../types/actions.js';
 import { DriverFactory } from '../drivers/DriverFactory.js';
+import { EventBus } from '../web/EventBus.js';
+import { SessionContext } from '../web/SessionContext.js';
 
 export class TUI {
   private static thinkingStartTime = 0;
@@ -49,6 +51,9 @@ export class TUI {
 
     startSpinner(`${pc.yellow('✻')} ${pc.dim(this.currentModelName)} ${pc.yellow('(0.0s)')} ${pc.dim('•')} ${pc.cyan(`"${this.currentActionDescription}"`)}`, 'yellow');
 
+    const sid = SessionContext.getCurrent();
+    if (sid) EventBus.emit(sid, 'system', { level: 'thinking', modelName: this.currentModelName, message: this.currentActionDescription });
+
     this.timerInterval = setInterval(() => {
       // Si no han llegado tokens todavía, rotar estados informativos
       if (this.streamedCharCount === 0 && !customText) {
@@ -79,6 +84,9 @@ export class TUI {
       const desc = this.currentActionDescription ? ` ${pc.dim('•')} ${pc.cyan(`"${this.currentActionDescription}"`)}` : '';
       updateSpinnerText(`${pc.yellow('✻')} ${pc.dim(`${this.currentModelName} analizando`)} ${pc.yellow(`(${elapsedSec}s${charsStr})`)}${desc}`);
     }
+
+    const sid = SessionContext.getCurrent();
+    if (sid) EventBus.emit(sid, 'stream', { chars: charCount, preview: previewText, modelName: this.currentModelName });
   }
 
   /**
@@ -109,6 +117,9 @@ export class TUI {
     const timeStr = durationMs !== undefined ? `${durationMs}ms` : '0ms';
     console.log(`${pc.yellow('+ Thought:')} ${pc.dim(timeStr)}`);
 
+    const sid = SessionContext.getCurrent();
+    if (sid) EventBus.emit(sid, 'thought', { thought, durationMs });
+
     if (thought && thought.trim()) {
       const lines = thought.trim().split('\n').map((l) => l.trim()).filter(Boolean);
       const displayLines = this.showFullThinking ? lines : lines.slice(0, 3);
@@ -127,6 +138,8 @@ export class TUI {
    */
   public static renderDiff(relPath: string, oldContent: string | null, newContent: string): void {
     DualPane.incrementAction('write_file');
+    const sid = SessionContext.getCurrent();
+    if (sid) EventBus.emit(sid, 'diff', { path: relPath, oldContent, newContent });
     if (oldContent === null) {
       const lineCount = newContent.split('\n').length;
       console.log(`  ${pc.green('→')} ${pc.white('Crear nuevo archivo:')} ${pc.cyan(relPath)} ${pc.dim(`(${lineCount} líneas)`)}`);
@@ -171,6 +184,9 @@ export class TUI {
     const completedCount = todos.filter((t) => (t.status || '').toLowerCase() === 'completed' || (t.status || '').toLowerCase() === 'done').length;
     const progressStr = `(${completedCount}/${todos.length} completadas)`;
 
+    const sid = SessionContext.getCurrent();
+    if (sid) EventBus.emit(sid, 'todos', { todos: todos as TodoItem[], summary: progressStr });
+
     console.log(`  ${pc.bold('Plan de tareas')} ${pc.dim(progressStr)}`);
     console.log(pc.gray('  ┌────────────────────────────────────────────────────────────────────'));
     todos.forEach((item, idx) => {
@@ -202,6 +218,9 @@ export class TUI {
   public static renderAction(type: string, details: Record<string, unknown>): void {
     this.stopThinking();
     DualPane.incrementAction(type);
+
+    const sid = SessionContext.getCurrent();
+    if (sid) EventBus.emit(sid, 'action', { type, details });
 
     switch (type) {
       case 'read_file':
@@ -261,6 +280,9 @@ export class TUI {
    */
   public static renderToolResult(toolType: string, success: boolean, output: string): void {
     this.stopThinking();
+
+    const sid = SessionContext.getCurrent();
+    if (sid) EventBus.emit(sid, 'tool_result', { toolType, success, output });
 
     const cleanOutput = output.trim();
     if (!cleanOutput) return;
@@ -338,6 +360,9 @@ export class TUI {
       fullResponse: response,
       durationMs,
     });
+
+    const sid = SessionContext.getCurrent();
+    if (sid) EventBus.emit(sid, 'worker', { workerName, subtaskPrompt, fullResponse: response, durationMs });
 
     console.log(`${brand.color('→ Agent:')} ${brand.color(brand.label)} ${pc.dim(`[#${record.id}]`)} ${pc.green(durationText)}`);
     console.log(`${pc.dim('  Task:')} ${pc.italic(subtaskPrompt)}`);
