@@ -541,6 +541,8 @@ async function refreshSessionMeta() {
           state.promptHistory.push(t.prompt);
         }
       }
+      renderTimeline(s.turns);
+      renderMetrics(s.turns);
     }
   }
 }
@@ -1661,7 +1663,107 @@ function init() {
   connectWs();
   ensureSession().then(() => {
     chatInput.focus();
+    if (typeof refreshFileTree === 'function') refreshFileTree();
   });
+}
+
+// ─────── F3.1: Explorador de Archivos ───────
+async function refreshFileTree() {
+  const container = $('#file-tree');
+  if (!container) return;
+  
+  const { data } = await api('/api/files');
+  if (data && data.tree) {
+    container.innerHTML = renderTreeNodes(data.tree);
+  } else {
+    container.innerHTML = '<div class="agent-empty">No se pudo cargar el árbol</div>';
+  }
+}
+
+function renderTreeNodes(nodes) {
+  if (!nodes || !nodes.length) return '';
+  return nodes.map(n => {
+    if (n.type === 'dir') {
+      return `
+        <div class="tree-dir open">
+          <div class="tree-node" onclick="this.parentElement.classList.toggle('open')">
+            <span class="tree-icon">📁</span> ${escapeHtml(n.name)}
+          </div>
+          <div class="tree-children">
+            ${renderTreeNodes(n.children)}
+          </div>
+        </div>
+      `;
+    } else {
+      return `
+        <div class="tree-file">
+          <div class="tree-node" onclick="openFileViewer('${escapeHtml(n.path)}')">
+            <span class="tree-icon">📄</span> ${escapeHtml(n.name)}
+          </div>
+        </div>
+      `;
+    }
+  }).join('');
+}
+
+async function openFileViewer(path) {
+  const { data } = await api('/api/files/content?path=' + encodeURIComponent(path));
+  if (data && data.content !== undefined) {
+    addEntry(`
+      <div class="tool-output-header">
+        <span>Archivo: ${escapeHtml(path)}</span>
+        <button class="btn-copy-code" title="Copiar">📋 Copiar</button>
+      </div>
+      <pre><code>${escapeHtml(data.content)}</code></pre>
+    `, 'tool-output');
+    
+    const copyBtn = $('#transcript .btn-copy-code:last-child');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', () => {
+        navigator.clipboard.writeText(data.content);
+        showToast('Copiado al portapapeles', 'success');
+      });
+    }
+  }
+}
+
+// ─────── F3.2: Timeline ───────
+function renderTimeline(turns) {
+  const container = $('#session-timeline');
+  if (!container) return;
+  if (!turns || !turns.length) {
+    container.innerHTML = 'Sin eventos.';
+    return;
+  }
+  container.innerHTML = turns.map((t, i) => `
+    <div style="font-size: 0.85em; margin-bottom: 8px; border-left: 2px solid var(--blue); padding-left: 8px;">
+      <div style="color: var(--text-muted)">Turno ${i + 1}</div>
+      <div style="font-weight: 500">${escapeHtml(t.prompt || 'Autónomo')}</div>
+    </div>
+  `).join('');
+}
+
+// ─────── F3.3: Metrics ───────
+function renderMetrics(turns) {
+  if (!turns) return;
+  let fileEdits = 0; 
+  let tokens = turns.length * 1500; 
+  
+  turns.forEach(t => {
+    if (t.thought && t.thought.toolCalls) {
+      t.thought.toolCalls.forEach(tc => {
+        if (tc.name === 'replace_file_content' || tc.name === 'write_to_file' || tc.name === 'multi_replace_file_content') fileEdits++;
+      });
+    }
+  });
+
+  const mTurns = $('#met-turns');
+  const mTokens = $('#met-tokens');
+  const mFiles = $('#met-cmds');
+  
+  if (mTurns) mTurns.textContent = turns.length;
+  if (mTokens) mTokens.textContent = '~' + (tokens / 1000).toFixed(1) + 'k';
+  if (mFiles) mFiles.textContent = fileEdits;
 }
 
 document.addEventListener('DOMContentLoaded', init);

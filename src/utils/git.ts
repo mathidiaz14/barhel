@@ -60,3 +60,21 @@ export async function gitCommit(cwd: string, message: string): Promise<string> {
   }
   return commitRes.stdout || '(committed)';
 }
+
+export async function gitBranchList(cwd: string): Promise<string> {
+  const res = await runGit(cwd, ['branch']);
+  if (!res.success) return `[git branch] ${res.error}`;
+  return res.stdout;
+}
+
+export async function gitBranchCreate(cwd: string, name: string): Promise<string> {
+  const res = await runGit(cwd, ['checkout', '-b', name]);
+  if (!res.success) return `[git checkout -b] ${res.error}`;
+  return res.stdout;
+}
+
+export async function gitBranchSwitch(cwd: string, name: string): Promise<string> {
+  const res = await runGit(cwd, ['checkout', name]);
+  if (!res.success) return `[git checkout] ${res.error}`;
+  return res.stdout;
+}

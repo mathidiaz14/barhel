@@ -223,6 +223,49 @@
                 <div class="todos-empty">Sin tareas en ejecución.</div>
               </div>
             </div>
+            </div>
+
+            <!-- File Explorer Panel (F3.1) -->
+            <div class="dash-panel" id="panel-explorer">
+              <div class="dash-panel-header" style="cursor:pointer;" onclick="document.getElementById('explorer-body').classList.toggle('collapsed')">
+                <span class="dash-panel-title">
+                  <span class="panel-icon">📁</span> Explorador
+                </span>
+                <button class="icon-btn-tiny" onclick="event.stopPropagation(); refreshFileTree()" title="Actualizar">🔄</button>
+              </div>
+              <div class="dash-panel-body" id="explorer-body">
+                <div id="file-tree" class="file-tree">Cargando...</div>
+              </div>
+            </div>
+
+            <!-- Timeline Panel (F3.2) -->
+            <div class="dash-panel" id="panel-timeline">
+              <div class="dash-panel-header" style="cursor:pointer;" onclick="document.getElementById('timeline-body').classList.toggle('collapsed')">
+                <span class="dash-panel-title">
+                  <span class="panel-icon">⏱️</span> Timeline
+                </span>
+              </div>
+              <div class="dash-panel-body collapsed" id="timeline-body">
+                <div id="session-timeline" class="timeline">Sin eventos.</div>
+              </div>
+            </div>
+
+            <!-- Metrics Panel (F3.3) -->
+            <div class="dash-panel" id="panel-metrics">
+              <div class="dash-panel-header" style="cursor:pointer;" onclick="document.getElementById('metrics-body').classList.toggle('collapsed')">
+                <span class="dash-panel-title">
+                  <span class="panel-icon">📈</span> Métricas
+                </span>
+              </div>
+              <div class="dash-panel-body collapsed" id="metrics-body">
+                <div class="metrics-grid">
+                  <div class="metric-item"><div class="metric-label">Turnos</div><div class="metric-val" id="met-turns">0</div></div>
+                  <div class="metric-item"><div class="metric-label">Tokens Aprox.</div><div class="metric-val" id="met-tokens">0</div></div>
+                  <div class="metric-item"><div class="metric-label">Errores</div><div class="metric-val" id="met-errors">0</div></div>
+                  <div class="metric-item"><div class="metric-label">Comandos</div><div class="metric-val" id="met-cmds">0</div></div>
+                </div>
+              </div>
+            </div>
 
             <!-- Quick Command Launcher Panel -->
             <div class="dash-panel" id="panel-quick-commands">

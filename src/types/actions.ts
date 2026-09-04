@@ -19,6 +19,7 @@ export type ActionType =
   | 'auto_test'
   | 'codegraph'
   | 'use_skill'
+  | 'webhook'
   | 'delegate_task'
   | 'delegate_batch'
   | 'finish';
@@ -39,6 +40,10 @@ export interface ActionPayload {
   prompt?: string;
   tasks?: DelegateTask[];
   summary?: string;
+  url?: string;
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string;
 }
 
 export type TodoStatus = 'pending' | 'in_progress' | 'completed' | 'failed';
