@@ -51,6 +51,7 @@ class Logger {
     console.log(`  ${bold(white('Commands'))}`);
     console.log();
     console.log(`  ${bold(yellow('/help'))}              ${dim('Show this help')}`);
+    console.log(`  ${bold(yellow('/web [start|stop|open]'))} ${dim('Start, stop or open web server')}`);
     console.log(`  ${bold(yellow('/workers'))}           ${dim('View agent analysis')}`);
     console.log(`  ${bold(yellow('/think'))}             ${dim('Toggle reasoning display')}`);
     console.log(`  ${bold(yellow('/resume'))}            ${dim('Resume previous session')}`);

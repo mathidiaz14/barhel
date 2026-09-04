@@ -80,6 +80,19 @@ export class SessionManager {
     return orch;
   }
 
+  public changeWorkdir(sessionId: string, newWorkdir: string): { ok: boolean; workdir?: string; error?: string } {
+    const orch = this.getSession(sessionId);
+    if (!orch) return { ok: false, error: 'Sesión no encontrada' };
+    try {
+      orch.setWorkdir(newWorkdir);
+      const updated = orch.getWorkdir();
+      EventBus.emit(sessionId, 'system', { level: 'success', message: `Carpeta de trabajo actualizada a: ${updated}` });
+      return { ok: true, workdir: updated };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || String(err) };
+    }
+  }
+
   private toManaged(orch: Orchestrator): ManagedSession {
     const s = orch.getSession();
     const q = this.queues.get(orch.getSessionId());
@@ -771,9 +784,16 @@ export class SessionManager {
   private async runGraph(orch: Orchestrator, arg: string): Promise<CommandResult> {
     const { CodeGraphEngine } = await import('../codegraph/CodeGraphEngine.js');
     const engine = new CodeGraphEngine(orch.getWorkdir());
+    const query = (arg || '').trim();
+    const forceRescan = ['sync', 'rescan', 'refresh', 'reindex', 'build', '-f', '--force'].includes(query.toLowerCase());
+
+    if (forceRescan) {
+      await engine.scan();
+      return { ok: true, output: `✔ [CODEGRAPH RE-SINCRONIZADO] Grafo de arquitectura AST re-indexado en disco.\n\n${engine.getHierarchy()}` };
+    }
+
     await engine.ensureLoaded();
-    if (arg && arg.trim()) {
-      const query = arg.trim();
+    if (query) {
       const info = engine.inspectSymbol(query);
       if (!info.includes('no encontrado')) return { ok: true, output: info };
       const matches = engine.search(query);

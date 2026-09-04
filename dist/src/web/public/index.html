@@ -83,7 +83,8 @@
           </div>
           <div class="system-meta-row">
             <span class="meta-lbl">Workspace:</span>
-            <span id="sys-workdir" class="meta-val code-path">./</span>
+            <span id="sys-workdir" class="meta-val code-path" title="Clic para cambiar carpeta de trabajo">./</span>
+            <button id="btn-change-workdir" class="btn-icon-subtle" title="Cambiar carpeta de trabajo">✏️</button>
           </div>
         </div>
       </div>
@@ -510,6 +511,25 @@
         <div id="modal-skill-meta" class="skill-meta-tags"></div>
         <div class="skill-instructions-box">
           <pre id="modal-skill-instructions"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHANGE WORKDIR MODAL -->
+  <div id="workdir-modal-overlay" class="modal-backdrop" hidden>
+    <div class="generic-modal">
+      <div class="modal-header">
+        <div class="modal-title">📁 Cambiar Carpeta de Trabajo</div>
+        <button class="modal-close" data-modal="workdir-modal-overlay">✕</button>
+      </div>
+      <div class="modal-body">
+        <p>Ingresa la ruta absoluta del directorio del proyecto en el cual deseas trabajar:</p>
+        <input type="text" id="workdir-path-input" class="generic-input" placeholder="C:\Proyectos\mi-proyecto o /home/usuario/proyecto" />
+        <div id="workdir-status" class="status-box" hidden></div>
+        <div class="modal-actions" style="margin-top: 16px;">
+          <button id="btn-submit-change-workdir" class="btn primary">Cambiar Carpeta</button>
+          <button class="btn ghost modal-close" data-modal="workdir-modal-overlay">Cancelar</button>
         </div>
       </div>
     </div>

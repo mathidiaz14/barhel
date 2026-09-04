@@ -19,6 +19,9 @@ const state = {
   autonomous: false,
   planOnly: false,
   thinking: true,
+  promptHistory: [],
+  historyIndex: -1,
+  tempPrompt: '',
 };
 
 // Default fallback commands if API is not loaded yet
@@ -531,7 +534,25 @@ async function refreshSessionMeta() {
     } else if (s.todos) {
       renderTodos(s.todos);
     }
+
+    if (s.turns && Array.isArray(s.turns)) {
+      for (const t of s.turns) {
+        if (t.prompt && !state.promptHistory.includes(t.prompt)) {
+          state.promptHistory.push(t.prompt);
+        }
+      }
+    }
   }
+}
+
+function pushPromptHistory(promptStr) {
+  const clean = (promptStr || '').trim();
+  if (!clean) return;
+  if (state.promptHistory.length === 0 || state.promptHistory[state.promptHistory.length - 1] !== clean) {
+    state.promptHistory.push(clean);
+  }
+  state.historyIndex = -1;
+  state.tempPrompt = '';
 }
 
 function setRunning(running) {
@@ -554,6 +575,8 @@ async function sendTurn(text) {
       return;
     }
   }
+
+  pushPromptHistory(text);
 
   // Si es un comando con '/'
   if (text.startsWith('/')) {
@@ -1194,6 +1217,49 @@ function init() {
       openCommandPalette('/');
       return;
     }
+
+    // Navegación con Flecha Arriba (ArrowUp) en el historial de prompts
+    if (e.key === 'ArrowUp') {
+      const isSingleLine = !chatInput.value.includes('\n');
+      const atStart = chatInput.selectionStart === 0 && chatInput.selectionEnd === 0;
+
+      if ((isSingleLine || atStart) && state.promptHistory.length > 0) {
+        e.preventDefault();
+        if (state.historyIndex === -1) {
+          state.tempPrompt = chatInput.value;
+        }
+        if (state.historyIndex < state.promptHistory.length - 1) {
+          state.historyIndex++;
+          const targetPrompt = state.promptHistory[state.promptHistory.length - 1 - state.historyIndex];
+          chatInput.value = targetPrompt;
+          chatInput.style.height = 'auto';
+          chatInput.style.height = `${chatInput.scrollHeight}px`;
+          chatInput.setSelectionRange(targetPrompt.length, targetPrompt.length);
+        }
+        return;
+      }
+    }
+
+    // Navegación con Flecha Abajo (ArrowDown) en el historial de prompts
+    if (e.key === 'ArrowDown') {
+      const isSingleLine = !chatInput.value.includes('\n');
+      const atEnd = chatInput.selectionStart === chatInput.value.length;
+
+      if ((isSingleLine || atEnd) && state.historyIndex >= 0) {
+        e.preventDefault();
+        state.historyIndex--;
+        if (state.historyIndex === -1) {
+          chatInput.value = state.tempPrompt;
+        } else {
+          const targetPrompt = state.promptHistory[state.promptHistory.length - 1 - state.historyIndex];
+          chatInput.value = targetPrompt;
+        }
+        chatInput.style.height = 'auto';
+        chatInput.style.height = `${chatInput.scrollHeight}px`;
+        chatInput.setSelectionRange(chatInput.value.length, chatInput.value.length);
+        return;
+      }
+    }
   });
 
   chatInput.addEventListener('input', () => {
@@ -1402,12 +1468,57 @@ function init() {
     }
   });
 
-  // Copy full workspace path on click
-  $('#sys-workdir')?.addEventListener('click', () => {
-    const full = $('#sys-workdir').textContent;
-    if (full && full !== './') {
-      navigator.clipboard.writeText(full);
-      showToast('Ruta de workspace copiada al portapapeles', 'success');
+  // Change Workdir Modal & Click handlers
+  const openWorkdirModal = () => {
+    const currentPath = $('#sys-workdir')?.textContent || '';
+    if ($('#workdir-path-input')) {
+      $('#workdir-path-input').value = currentPath;
+    }
+    const statusBox = $('#workdir-status');
+    if (statusBox) statusBox.hidden = true;
+    openModal('workdir-modal-overlay');
+  };
+
+  $('#sys-workdir')?.addEventListener('click', openWorkdirModal);
+  $('#btn-change-workdir')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openWorkdirModal();
+  });
+
+  const submitChangeWorkdir = async () => {
+    if (!state.currentSessionId) return;
+    const newPath = $('#workdir-path-input').value.trim();
+    if (!newPath) return;
+
+    const statusBox = $('#workdir-status');
+    statusBox.hidden = false;
+    statusBox.textContent = 'Actualizando carpeta de trabajo...';
+    statusBox.style.color = 'var(--text-muted)';
+
+    const { data } = await api(`/api/session/${state.currentSessionId}/workdir`, {
+      method: 'POST',
+      body: { workdir: newPath },
+    });
+
+    if (data && data.ok) {
+      statusBox.textContent = `✔ Carpeta de trabajo cambiada a: ${data.workdir}`;
+      statusBox.style.color = 'var(--green)';
+      showToast(`Carpeta de trabajo cambiada a: ${data.workdir}`, 'success');
+      setTimeout(() => {
+        closeModal('workdir-modal-overlay');
+        refreshSessionMeta();
+      }, 1000);
+    } else {
+      statusBox.textContent = `✖ Error: ${data?.error || 'No se pudo cambiar la carpeta'}`;
+      statusBox.style.color = 'var(--red)';
+    }
+  };
+
+  $('#btn-submit-change-workdir')?.addEventListener('click', submitChangeWorkdir);
+  $('#workdir-path-input')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      submitChangeWorkdir();
     }
   });
 

@@ -77,6 +77,10 @@ export class WebServer {
     logger.success(`Barhel Web escuchando en http://localhost:${this.port}`);
   }
 
+  public getPort(): number {
+    return this.port;
+  }
+
   public async stop(): Promise<void> {
     await this.sessionManager.shutdownAll();
     // Cerrar logins pendientes
@@ -447,6 +451,16 @@ export class WebServer {
         if (sub === 'close' && method === 'POST') {
           const result = await this.sessionManager.closeSession(sessionId);
           return this.sendJson(res, result.ok ? 200 : 400, { ok: result.ok, output: result.output, message: result.message || '' });
+        }
+
+        // Cambiar directorio de trabajo (workdir)
+        if (sub === 'workdir' && method === 'POST') {
+          const body = await this.readBody(req);
+          if (!body.workdir || !String(body.workdir).trim()) {
+            return this.sendJson(res, 400, { ok: false, error: 'workdir requerido' });
+          }
+          const result = this.sessionManager.changeWorkdir(sessionId, String(body.workdir).trim());
+          return this.sendJson(res, result.ok ? 200 : 400, result);
         }
 
         // Workers (análisis de delegación) - del snapshot

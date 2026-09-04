@@ -28,6 +28,7 @@ export declare class Orchestrator {
     getLeaderId(): string;
     getActiveWorkers(): string[];
     getWorkdir(): string;
+    setWorkdir(newWorkdir: string): void;
     getToolEngine(): ToolEngine;
     isAutonomous(): boolean;
     toggleAutonomous(): boolean;

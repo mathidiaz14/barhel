@@ -18,6 +18,7 @@ export declare class ToolEngine {
     getCodeGraph(): CodeGraphEngine;
     getTestSandbox(): TestSandbox;
     getWorkdir(): string;
+    setWorkdir(newWorkdir: string): void;
     setAutonomous(autonomous: boolean): void;
     setPlanOnly(planOnly: boolean): void;
     isPlanOnly(): boolean;

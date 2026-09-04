@@ -201,6 +201,12 @@ Supervisa en tiempo real el porcentaje (`0-100%`) y estado de las subtareas (`to
 /supervise
 ```
 
+### 🌐 6. Servidor Web Dashboard (`barhel web` / `/web`)
+Inicia la interfaz web en `http://localhost:7898` para monitorear y controlar Barhel desde cualquier navegador:
+- **Desde la terminal:** `barhel web [--port 7898]`
+- **Desde el chat interactivo:** `/web` (o `/web start`, `/web stop`, `/web status`, `/web open`)
+
+
 ---
 
 ## ⌨️ Tabla de Comandos Slash en el Chat
@@ -208,6 +214,7 @@ Supervisa en tiempo real el porcentaje (`0-100%`) y estado de las subtareas (`to
 | Comando | Descripción |
 | :--- | :--- |
 | `/help` | Muestra la ayuda y lista de comandos |
+| `/web [start\|stop\|status\|open]` | 🌐 **Servidor Web:** Inicia, detiene o abre el servidor web de Barhel en el navegador |
 | `/test [filtro]` | 🧪 **Auto-Pruebas:** Ejecuta el runner de pruebas del proyecto o un archivo de test |
 | `/graph [simbolo]` | 🕸️ **CodeGraph AST:** Muestra el mapa de arquitectura o inspecciona funciones y quién las llama (alias: `/codegraph`) |
 | `/skills` | ⚡ **Lista de Skills:** Muestra las habilidades y metodologías instaladas |

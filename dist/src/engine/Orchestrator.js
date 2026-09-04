@@ -125,6 +125,12 @@ export class Orchestrator {
     getWorkdir() {
         return this.toolEngine.getWorkdir();
     }
+    setWorkdir(newWorkdir) {
+        this.toolEngine.setWorkdir(newWorkdir);
+        this.currentSession.workdir = this.toolEngine.getWorkdir();
+        HistoryManager.saveSession(this.currentSession);
+        EventBus.emit(this.getSessionId(), 'session_meta', { workdir: this.currentSession.workdir });
+    }
     getToolEngine() {
         return this.toolEngine;
     }

@@ -46,6 +46,7 @@ export interface BusEventPayload {
   autonomous?: boolean;
   planOnly?: boolean;
   thinking?: boolean;
+  workdir?: string;
   snapshot?: SupervisionSnapshot;
 }
 
@@ -168,6 +169,7 @@ export class EventBus {
         if (payload.autonomous !== undefined) snap.autonomous = payload.autonomous;
         if (payload.planOnly !== undefined) snap.planOnly = payload.planOnly;
         if (payload.thinking !== undefined) snap.thinking = payload.thinking;
+        if (payload.workdir !== undefined) snap.workdir = payload.workdir;
         break;
       case 'model':
         if (payload.modelName) snap.leader = payload.modelName;

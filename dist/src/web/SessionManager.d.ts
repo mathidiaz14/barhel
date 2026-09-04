@@ -27,6 +27,11 @@ export declare class SessionManager {
     getActiveSessions(): ManagedSession[];
     hasSession(sessionId: string): boolean;
     getSession(sessionId: string): Orchestrator | undefined;
+    changeWorkdir(sessionId: string, newWorkdir: string): {
+        ok: boolean;
+        workdir?: string;
+        error?: string;
+    };
     private toManaged;
     /**
      * Crea (o reutiliza) un orquestador para el workspace dado.

@@ -72,6 +72,21 @@ export class ToolEngine {
     return this.workdir;
   }
 
+  public setWorkdir(newWorkdir: string): void {
+    const resolved = path.resolve(newWorkdir);
+    if (!fs.existsSync(resolved)) {
+      throw new Error(`El directorio "${newWorkdir}" no existe.`);
+    }
+    const stat = fs.statSync(resolved);
+    if (!stat.isDirectory()) {
+      throw new Error(`La ruta "${newWorkdir}" no es un directorio válido.`);
+    }
+    this.workdir = resolved;
+    this.workdirReal = this.resolveRealPath(this.workdir);
+    this.codegraphEngine = new CodeGraphEngine(this.workdir);
+    this.testSandbox = new TestSandbox(this.workdir);
+  }
+
   public setAutonomous(autonomous: boolean): void {
     this.autonomous = autonomous;
   }

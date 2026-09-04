@@ -454,9 +454,17 @@ program
   .option('-w, --workdir <path>', 'Directorio de trabajo', process.cwd())
   .action(async (query, options) => {
     const engine = new CodeGraphEngine(options.workdir);
+    const forceRescan = query && ['sync', 'rescan', 'refresh', 'reindex', 'build', '-f', '--force'].includes(query.toLowerCase());
+
     logger.startSpinner('Escaneando repositorio e indexando símbolos AST...');
     await engine.scan();
     logger.stopSpinner();
+
+    if (forceRescan) {
+      console.log(pc.green('\n✔ [CODEGRAPH SINCRONIZADO] Grafo de arquitectura AST actualizado en disco.\n'));
+      console.log(`\n${engine.getHierarchy()}\n`);
+      return;
+    }
 
     if (query) {
       const info = engine.inspectSymbol(query);
@@ -578,27 +586,73 @@ program
     }
   });
 
-// Subcomando: Servidor Web (interfaz web en el puerto 78987 por defecto)
+// Subcomando: Servidor Web (interfaz web en el puerto 7898 por defecto)
 program
-  .command('web')
-  .description('Inicia el servidor web de Barhel (interfaz en http://localhost:7898)')
+  .command('web [action]')
+  .description('Inicia, detiene o consulta el servidor web de Barhel en segundo plano (start | stop | status)')
   .option('-p, --port <number>', 'Puerto del servidor web', '7898')
   .option('-w, --workdir <path>', 'Directorio de trabajo', process.cwd())
-  .action(async (options) => {
-    const { startWebServer } = await import('../src/web/index.js');
+  .option('-f, --foreground', 'Ejecuta en primer plano bloqueando la terminal actual', false)
+  .action(async (actionArg, options) => {
+    const action = (actionArg || '').toLowerCase().trim();
     const port = parseInt(options.port as any, 10);
     if (isNaN(port) || port < 1 || port > 65535) {
       logger.error('Puerto inválido. Debe ser un número entre 1 y 65535.');
       process.exit(1);
     }
-    const server = await startWebServer({ port, workdir: options.workdir });
-    logger.info(`Web UI: http://localhost:${port}  (presiona Ctrl+C para detener)`);
-    const stop = async () => {
-      await server.stop();
+
+    if (action === 'stop') {
+      DaemonManager.stopWebDaemon();
       process.exit(0);
-    };
-    process.on('SIGINT', stop);
-    process.on('SIGTERM', stop);
+    }
+
+    if (action === 'status') {
+      const status = DaemonManager.getWebStatus();
+      if (status.running) {
+        console.log(pc.green(`\n✔ [SERVIDOR WEB ACTIVO EN SEGUNDO PLANO] PID: ${status.pid}`));
+        console.log(pc.bold(pc.cyan(`  URL: http://localhost:${status.port || port}`)));
+        console.log(pc.dim(`  Logs: ${status.logPath}\n`));
+      } else {
+        console.log(pc.dim('\n[SERVIDOR WEB INACTIVO] Usa: barhel web start para iniciarlo en segundo plano.\n'));
+      }
+      process.exit(0);
+    }
+
+    if (action === 'serveinternal') {
+      // Subcomando interno ejecutado por el proceso daemon desvinculado
+      const { startWebServer } = await import('../src/web/index.js');
+      const server = await startWebServer({ port, workdir: options.workdir });
+      const stop = async () => {
+        await server.stop();
+        process.exit(0);
+      };
+      process.on('SIGINT', stop);
+      process.on('SIGTERM', stop);
+      return;
+    }
+
+    if (options.foreground || action === 'fg' || action === 'serve') {
+      // Ejecución en primer plano
+      const { startWebServer } = await import('../src/web/index.js');
+      const server = await startWebServer({ port, workdir: options.workdir });
+      logger.info(`Web UI en primer plano: http://localhost:${port}  (presiona Ctrl+C para detener)`);
+      const stop = async () => {
+        await server.stop();
+        process.exit(0);
+      };
+      process.on('SIGINT', stop);
+      process.on('SIGTERM', stop);
+      return;
+    }
+
+    // Por defecto (barhel web o barhel web start): Iniciar en segundo plano
+    const status = DaemonManager.startWebDaemon(port, options.workdir);
+    if (status.running) {
+      console.log(pc.green(`\n✔ [SERVIDOR WEB INICIADO EN SEGUNDO PLANO] PID: ${status.pid}`));
+      console.log(pc.bold(pc.cyan(`  URL: http://localhost:${port}`)));
+      console.log(pc.dim(`  Logs: ${status.logPath}`));
+      console.log(pc.dim(`  Para detenerlo: barhel web stop\n`));
+    }
   });
 
 program.parse(process.argv);

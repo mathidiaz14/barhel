@@ -18,7 +18,25 @@ import { ProgressSupervisor } from '../engine/ProgressSupervisor.js';
 import { TelegramBot } from '../daemon/TelegramBot.js';
 import { DaemonManager } from '../daemon/DaemonManager.js';
 import { runDoctorDiagnostic } from './doctor.js';
+function openInBrowser(url) {
+    try {
+        const platform = process.platform;
+        if (platform === 'win32') {
+            execSync(`start "" "${url}"`);
+        }
+        else if (platform === 'darwin') {
+            execSync(`open "${url}"`);
+        }
+        else {
+            execSync(`xdg-open "${url}"`);
+        }
+    }
+    catch {
+        // Silencioso si no se abre el navegador
+    }
+}
 const AVAILABLE_SLASH_COMMANDS = [
+    { name: '/web', desc: 'Inicia, detiene o abre el servidor web de Barhel (start/stop/status/open)', aliases: ['/server', '/dashboard'], needsArg: 'Acción o puerto (start/stop/status/open [puerto]):', optionalArg: true },
     { name: '/doctor', desc: 'Diagnóstico profundo de autenticación de sesión, Cloudflare y selectores UI', needsArg: 'Proveedor (opcional):', optionalArg: true },
     { name: '/test', desc: 'Ejecuta o genera pruebas unitarias automáticas para el proyecto', needsArg: 'Archivo o filtro (opcional):', optionalArg: true },
     { name: '/graph', desc: 'Mapa de arquitectura AST y búsqueda de símbolos en memoria', aliases: ['/codegraph'], needsArg: 'Símbolo o consulta (opcional):', optionalArg: true },
@@ -87,6 +105,18 @@ export async function startInteractiveChat(options = {}) {
     };
     const orchestrator = new Orchestrator(mergedOptions);
     const workdir = orchestrator.getWorkdir();
+    let activeWebServer = null;
+    const stopActiveWebServer = async () => {
+        if (activeWebServer) {
+            try {
+                await activeWebServer.stop();
+            }
+            catch {
+                // silencioso
+            }
+            activeWebServer = null;
+        }
+    };
     const printExitMessage = () => {
         const sess = orchestrator.getSession();
         console.log(`\n${pc.bold('Sesión guardada:')} ${pc.cyan(sess.title)} ${pc.dim(`(#${sess.id})`)}`);
@@ -148,11 +178,20 @@ export async function startInteractiveChat(options = {}) {
             case '/graph':
             case '/codegraph': {
                 const codeGraph = new CodeGraphEngine(workdir);
+                const query = (arg || '').trim();
+                const forceRescan = ['sync', 'rescan', 'refresh', 'reindex', 'build', '-f', '--force'].includes(query.toLowerCase());
+                if (forceRescan) {
+                    logger.startSpinner('Re-escaneando e indexando repositorio completo en CodeGraph...');
+                    await codeGraph.scan();
+                    logger.stopSpinner();
+                    console.log(pc.green('\n✔ [CODEGRAPH SINCRONIZADO] Grafo de arquitectura AST actualizado en memoria y disco.\n'));
+                    console.log(`\n${codeGraph.getHierarchy()}\n`);
+                    break;
+                }
                 logger.startSpinner('Consultando CodeGraph en memoria...');
                 await codeGraph.ensureLoaded();
                 logger.stopSpinner();
-                if (arg && arg.trim()) {
-                    const query = arg.trim();
+                if (query) {
                     const info = codeGraph.inspectSymbol(query);
                     if (!info.includes('no encontrado')) {
                         console.log(`\n${info}\n`);
@@ -264,6 +303,75 @@ export async function startInteractiveChat(options = {}) {
                         console.log(pc.dim('\n[DAEMON INACTIVO] Usa: /daemon start para iniciarlo en segundo plano.\n'));
                     }
                 }
+                break;
+            }
+            case '/web':
+            case '/server':
+            case '/dashboard': {
+                const parts = (arg || '').trim().split(/\s+/).filter(Boolean);
+                const sub = (parts[0] || '').toLowerCase();
+                const portArg = parts.find((p) => /^\d+$/.test(p)) || '7898';
+                const port = parseInt(portArg, 10);
+                if (sub === 'stop') {
+                    let stoppedAny = false;
+                    if (activeWebServer) {
+                        await stopActiveWebServer();
+                        stoppedAny = true;
+                    }
+                    const daemonStatus = DaemonManager.getWebStatus();
+                    if (daemonStatus.running) {
+                        DaemonManager.stopWebDaemon();
+                        stoppedAny = true;
+                    }
+                    if (stoppedAny) {
+                        console.log(pc.green('\n✔ [WEB] Servidor web detenido correctamente.\n'));
+                    }
+                    else {
+                        console.log(pc.yellow('\n[WEB] No hay ningún servidor web activo.\n'));
+                    }
+                    break;
+                }
+                if (sub === 'status') {
+                    const daemonStatus = DaemonManager.getWebStatus();
+                    if (activeWebServer) {
+                        console.log(pc.green(`\n✔ [WEB ACTIVO (EN PROCESO)] http://localhost:${activeWebServer.getPort()}\n`));
+                    }
+                    else if (daemonStatus.running) {
+                        console.log(pc.green(`\n✔ [WEB ACTIVO (EN SEGUNDO PLANO)] PID: ${daemonStatus.pid} • http://localhost:${daemonStatus.port || 7898}\n`));
+                    }
+                    else {
+                        console.log(pc.dim('\n[WEB INACTIVO] Usa: /web start o barhel web start para iniciarlo.\n'));
+                    }
+                    break;
+                }
+                const daemonStatus = DaemonManager.getWebStatus();
+                let targetPort = port;
+                if (daemonStatus.running && daemonStatus.port) {
+                    targetPort = daemonStatus.port;
+                    console.log(pc.cyan(`\n✔ [WEB ACTIVO] El servidor web ya se encuentra corriendo en segundo plano (PID: ${daemonStatus.pid}, Puerto: ${targetPort}).`));
+                }
+                else if (activeWebServer) {
+                    targetPort = activeWebServer.getPort();
+                    console.log(pc.cyan(`\n✔ [WEB ACTIVO] El servidor web ya está corriendo en este proceso (Puerto: ${targetPort}).`));
+                }
+                else {
+                    logger.startSpinner(`Iniciando servidor web en segundo plano (puerto ${port})...`);
+                    try {
+                        const started = DaemonManager.startWebDaemon(port, workdir);
+                        logger.stopSpinner();
+                        targetPort = started.port || port;
+                        console.log(pc.green(`\n✔ [WEB EN SEGUNDO PLANO] Servidor web iniciado en: ${pc.bold(pc.cyan(`http://localhost:${targetPort}`))}`));
+                    }
+                    catch (err) {
+                        logger.stopSpinner();
+                        logger.error(`No se pudo iniciar el servidor web daemon en el puerto ${port}`, err);
+                        break;
+                    }
+                }
+                const currentUrl = `http://localhost:${targetPort}`;
+                console.log(pc.dim(`Abriendo ${currentUrl} en el navegador...`));
+                openInBrowser(currentUrl);
+                console.log();
                 break;
             }
             case '/help':
@@ -607,6 +715,7 @@ export async function startInteractiveChat(options = {}) {
             case '/exit':
             case '/quit':
                 console.log(pc.cyan('\nCerrando Barhel y guardando sesion...'));
+                await stopActiveWebServer();
                 await orchestrator.shutdown();
                 printExitMessage();
                 process.exit(0);
@@ -684,6 +793,7 @@ export async function startInteractiveChat(options = {}) {
                 }
                 else {
                     console.log(pc.cyan('\nCerrando Barhel y guardando sesion...'));
+                    await stopActiveWebServer();
                     await orchestrator.shutdown();
                     printExitMessage();
                     process.exit(0);
@@ -721,6 +831,7 @@ export async function startInteractiveChat(options = {}) {
         const lower = input.toLowerCase();
         if (lower === 'exit' || lower === 'quit' || lower === 'salir' || lower === ':q' || lower === 'q') {
             console.log(pc.cyan('\nCerrando Barhel y guardando sesion...'));
+            await stopActiveWebServer();
             await orchestrator.shutdown();
             printExitMessage();
             process.exit(0);

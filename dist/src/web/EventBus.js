@@ -96,6 +96,8 @@ export class EventBus {
                     snap.planOnly = payload.planOnly;
                 if (payload.thinking !== undefined)
                     snap.thinking = payload.thinking;
+                if (payload.workdir !== undefined)
+                    snap.workdir = payload.workdir;
                 break;
             case 'model':
                 if (payload.modelName)

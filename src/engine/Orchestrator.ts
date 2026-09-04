@@ -145,6 +145,13 @@ export class Orchestrator {
     return this.toolEngine.getWorkdir();
   }
 
+  public setWorkdir(newWorkdir: string): void {
+    this.toolEngine.setWorkdir(newWorkdir);
+    this.currentSession.workdir = this.toolEngine.getWorkdir();
+    HistoryManager.saveSession(this.currentSession);
+    EventBus.emit(this.getSessionId(), 'session_meta', { workdir: this.currentSession.workdir });
+  }
+
   public getToolEngine(): ToolEngine {
     return this.toolEngine;
   }

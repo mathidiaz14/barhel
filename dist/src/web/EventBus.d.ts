@@ -26,6 +26,7 @@ export interface BusEventPayload {
     autonomous?: boolean;
     planOnly?: boolean;
     thinking?: boolean;
+    workdir?: string;
     snapshot?: SupervisionSnapshot;
 }
 export interface BusMessage {

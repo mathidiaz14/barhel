@@ -10,6 +10,7 @@ export declare class WebServer {
         workdir?: string;
     });
     start(): Promise<void>;
+    getPort(): number;
     stop(): Promise<void>;
     private broadcast;
     private handleWs;
