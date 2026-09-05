@@ -8,5 +8,6 @@ export var ProviderType;
     ProviderType["MISTRAL"] = "mistral";
     ProviderType["PERPLEXITY"] = "perplexity";
     ProviderType["OPENROUTER"] = "openrouter";
+    ProviderType["FREELLMAPI"] = "freellmapi";
 })(ProviderType || (ProviderType = {}));
 //# sourceMappingURL=providers.js.map

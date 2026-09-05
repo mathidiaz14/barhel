@@ -6,7 +6,8 @@ export declare enum ProviderType {
     QWEN = "qwen",
     MISTRAL = "mistral",
     PERPLEXITY = "perplexity",
-    OPENROUTER = "openrouter"
+    OPENROUTER = "openrouter",
+    FREELLMAPI = "freellmapi"
 }
 export interface ProviderSelectors {
     inputPrompt: string[];

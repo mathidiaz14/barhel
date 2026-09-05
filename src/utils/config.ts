@@ -27,6 +27,9 @@ export interface BarhelConfig {
   allowedChatIds?: number[];
   openrouterApiKey?: string;
   openrouterModel?: string;
+  freellmapiBaseUrl?: string;
+  freellmapiApiKey?: string;
+  freellmapiModel?: string;
 }
 
 const CONFIG_DIR = path.join(os.homedir(), '.dev-agent-sessions');

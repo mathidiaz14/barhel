@@ -1050,14 +1050,14 @@ async function loadAuth() {
 
   const loginGrid = $('#login-providers');
   loginGrid.innerHTML = state.providers.map((p) => {
-    if (p.id === 'openrouter') {
+    if (p.id === 'openrouter' || p.id === 'freellmapi') {
       const hasKey = Boolean(state.authStatus[p.id]?.exists);
       return `
         <div class="auth-card">
           <div class="ac-name">${escapeHtml(p.name)}</div>
-          <div style="font-size:11px;color:var(--text-muted)">ID: ${escapeHtml(p.id)} · Autenticación por API Key</div>
+          <div style="font-size:11px;color:var(--text-muted)">ID: ${escapeHtml(p.id)} · Autenticación por Gateway / API</div>
           <div style="display:flex;gap:6px;margin-top:auto;">
-            <button class="btn primary" onclick="switchView('settings')">⚙️ ${hasKey ? 'Cambiar API Key' : 'Configurar API Key'}</button>
+            <button class="btn primary" onclick="switchView('settings')">⚙️ Configurar</button>
           </div>
         </div>
       `;
@@ -1103,6 +1103,35 @@ async function loadSettings() {
       <select id="cfg-leader">
         ${providers.map((p) => `<option value="${p.id}" ${p.id === cfg.leader ? 'selected' : ''}>${escapeHtml(p.name)} (${p.id})</option>`).join('')}
       </select>
+    </div>
+
+    <!-- FreeLLMAPI Settings Box -->
+    <div class="settings-field" style="background:rgba(168,85,247,0.04);border:1px solid rgba(168,85,247,0.25);border-radius:var(--radius-md);padding:14px;margin:4px 0;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <label style="font-weight:700;color:var(--purple);display:flex;align-items:center;gap:6px;">
+          <span>⚡</span> Configuración FreeLLMAPI (Self-Hosted / Gateway Gratuito)
+        </label>
+        <a href="https://github.com/tashfeenahmed/freellmapi" target="_blank" style="font-size:11px;color:var(--purple);text-decoration:none;font-weight:600;">Ver en GitHub ↗</a>
+      </div>
+      <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:10px;">
+        Conecta un gateway FreeLLMAPI local o remoto (OpenAI-compatible) con auto-failover y rotación entre Google, Groq, Cerebras, Mistral, etc.
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <div>
+          <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px;">Endpoint Base URL:</label>
+          <input type="text" id="cfg-freellmapi-url" placeholder="http://localhost:3001/v1" value="${escapeHtml(cfg.freellmapiBaseUrl || 'http://localhost:3001/v1')}" style="font-family:var(--font-mono);font-size:12px;" />
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div>
+            <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px;">API Key (opcional):</label>
+            <input type="password" id="cfg-freellmapi-key" placeholder="free o tu token..." value="${escapeHtml(cfg.freellmapiApiKey || '')}" style="font-family:var(--font-mono);font-size:12px;" />
+          </div>
+          <div>
+            <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px;">Modelo / Alias:</label>
+            <input type="text" id="cfg-freellmapi-model" placeholder="auto, gemini-2.0-flash, llama-3.3-70b..." value="${escapeHtml(cfg.freellmapiModel || 'auto')}" style="font-family:var(--font-mono);font-size:12px;" />
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- OpenRouter API Settings Box -->
@@ -1169,10 +1198,13 @@ async function loadSettings() {
     const autonomousDefault = $('#cfg-auto').checked;
     const openrouterApiKey = $('#cfg-openrouter-key')?.value.trim() || undefined;
     const openrouterModel = $('#cfg-openrouter-model')?.value.trim() || undefined;
+    const freellmapiBaseUrl = $('#cfg-freellmapi-url')?.value.trim() || undefined;
+    const freellmapiApiKey = $('#cfg-freellmapi-key')?.value.trim() || undefined;
+    const freellmapiModel = $('#cfg-freellmapi-model')?.value.trim() || undefined;
 
     const { data } = await api('/api/config', {
       method: 'POST',
-      body: { leader, workers, maxIterations, autonomousDefault, openrouterApiKey, openrouterModel },
+      body: { leader, workers, maxIterations, autonomousDefault, openrouterApiKey, openrouterModel, freellmapiBaseUrl, freellmapiApiKey, freellmapiModel },
     });
 
     if (data && data.ok) {

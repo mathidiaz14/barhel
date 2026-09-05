@@ -17,6 +17,9 @@ export interface BarhelConfig {
     allowedChatIds?: number[];
     openrouterApiKey?: string;
     openrouterModel?: string;
+    freellmapiBaseUrl?: string;
+    freellmapiApiKey?: string;
+    freellmapiModel?: string;
 }
 export declare class ConfigManager {
     private static ensureDir;

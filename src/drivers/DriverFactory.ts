@@ -7,6 +7,7 @@ import { QwenDriver, QWEN_CONFIG } from './QwenDriver.js';
 import { MistralDriver, MISTRAL_CONFIG } from './MistralDriver.js';
 import { PerplexityDriver, PERPLEXITY_CONFIG } from './PerplexityDriver.js';
 import { OpenRouterDriver, OPENROUTER_CONFIG } from './OpenRouterDriver.js';
+import { FreeLLMAPIDriver, FREELLMAPI_CONFIG } from './FreeLLMAPIDriver.js';
 import { ProviderConfig, ProviderType } from '../types/providers.js';
 
 export interface ProviderMeta {
@@ -19,6 +20,14 @@ export interface ProviderMeta {
 }
 
 export const AVAILABLE_PROVIDERS: Record<string, ProviderMeta> = {
+  [ProviderType.FREELLMAPI]: {
+    id: ProviderType.FREELLMAPI,
+    name: 'FreeLLMAPI (Self-Hosted / Gateway Gratuito)',
+    url: 'https://github.com/tashfeenahmed/freellmapi',
+    description: 'Gateway OpenAI-compatible local con auto-failover y agregador de APIs gratuitas.',
+    config: FREELLMAPI_CONFIG,
+    createDriver: () => new FreeLLMAPIDriver(),
+  },
   [ProviderType.OPENROUTER]: {
     id: ProviderType.OPENROUTER,
     name: 'OpenRouter (Modelos Gratuitos / API)',

@@ -7,6 +7,7 @@ export enum ProviderType {
   MISTRAL = 'mistral',
   PERPLEXITY = 'perplexity',
   OPENROUTER = 'openrouter',
+  FREELLMAPI = 'freellmapi',
 }
 
 export interface ProviderSelectors {

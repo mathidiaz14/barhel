@@ -41,6 +41,26 @@ export function listSessionsStatus() {
             };
             continue;
         }
+        if (provider === ProviderType.FREELLMAPI) {
+            const cfgPath = path.join(SESSIONS_BASE_DIR, 'config.json');
+            let baseUrl = process.env.FREELLMAPI_BASE_URL || 'http://localhost:3001/v1';
+            if (fs.existsSync(cfgPath)) {
+                try {
+                    const parsed = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
+                    if (parsed.freellmapiBaseUrl)
+                        baseUrl = parsed.freellmapiBaseUrl;
+                }
+                catch {
+                    // Ignorar error de lectura
+                }
+            }
+            result[provider] = {
+                path: `Gateway Endpoint (${baseUrl})`,
+                exists: true,
+                fileCount: 1,
+            };
+            continue;
+        }
         const pPath = path.join(base, provider.toLowerCase());
         let count = 0;
         let hasRealSession = false;
