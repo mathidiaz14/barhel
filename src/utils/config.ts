@@ -25,6 +25,8 @@ export interface BarhelConfig {
   telegramToken?: string;
   telegramChatId?: string;
   allowedChatIds?: number[];
+  openrouterApiKey?: string;
+  openrouterModel?: string;
 }
 
 const CONFIG_DIR = path.join(os.homedir(), '.dev-agent-sessions');

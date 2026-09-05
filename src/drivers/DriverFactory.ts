@@ -6,6 +6,7 @@ import { GeminiDriver, GEMINI_CONFIG } from './GeminiDriver.js';
 import { QwenDriver, QWEN_CONFIG } from './QwenDriver.js';
 import { MistralDriver, MISTRAL_CONFIG } from './MistralDriver.js';
 import { PerplexityDriver, PERPLEXITY_CONFIG } from './PerplexityDriver.js';
+import { OpenRouterDriver, OPENROUTER_CONFIG } from './OpenRouterDriver.js';
 import { ProviderConfig, ProviderType } from '../types/providers.js';
 
 export interface ProviderMeta {
@@ -18,6 +19,14 @@ export interface ProviderMeta {
 }
 
 export const AVAILABLE_PROVIDERS: Record<string, ProviderMeta> = {
+  [ProviderType.OPENROUTER]: {
+    id: ProviderType.OPENROUTER,
+    name: 'OpenRouter (Modelos Gratuitos / API)',
+    url: 'https://openrouter.ai',
+    description: 'Acceso directo a DeepSeek R1, Llama 3.3 70B, Qwen 2.5 Coder y Gemini gratis sin Playwright.',
+    config: OPENROUTER_CONFIG,
+    createDriver: () => new OpenRouterDriver(),
+  },
   [ProviderType.DEEPSEEK]: {
     id: ProviderType.DEEPSEEK,
     name: 'DeepSeek Chat (V3 / R1)',

@@ -1049,16 +1049,30 @@ async function loadAuth() {
   }).join('') || '<div class="empty-state-box">Sin datos de autenticación</div>';
 
   const loginGrid = $('#login-providers');
-  loginGrid.innerHTML = state.providers.map((p) => `
-    <div class="auth-card">
-      <div class="ac-name">${escapeHtml(p.name)}</div>
-      <div style="font-size:11px;color:var(--text-muted)">ID: ${escapeHtml(p.id)}</div>
-      <div style="display:flex;gap:6px;margin-top:auto;">
-        <button class="btn primary" data-login="${escapeHtml(p.id)}">Iniciar Sesión</button>
-        <button class="btn ghost" data-clear="${escapeHtml(p.id)}">Borrar</button>
+  loginGrid.innerHTML = state.providers.map((p) => {
+    if (p.id === 'openrouter') {
+      const hasKey = Boolean(state.authStatus[p.id]?.exists);
+      return `
+        <div class="auth-card">
+          <div class="ac-name">${escapeHtml(p.name)}</div>
+          <div style="font-size:11px;color:var(--text-muted)">ID: ${escapeHtml(p.id)} · Autenticación por API Key</div>
+          <div style="display:flex;gap:6px;margin-top:auto;">
+            <button class="btn primary" onclick="switchView('settings')">⚙️ ${hasKey ? 'Cambiar API Key' : 'Configurar API Key'}</button>
+          </div>
+        </div>
+      `;
+    }
+    return `
+      <div class="auth-card">
+        <div class="ac-name">${escapeHtml(p.name)}</div>
+        <div style="font-size:11px;color:var(--text-muted)">ID: ${escapeHtml(p.id)}</div>
+        <div style="display:flex;gap:6px;margin-top:auto;">
+          <button class="btn primary" data-login="${escapeHtml(p.id)}">Iniciar Sesión</button>
+          <button class="btn ghost" data-clear="${escapeHtml(p.id)}">Borrar</button>
+        </div>
       </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 }
 
 // 6. Settings View
@@ -1070,13 +1084,51 @@ async function loadSettings() {
   const providers = pd.providers || [];
   const cfg = cd.config || { leader: 'deepseek', workers: [], autonomousDefault: false, maxIterations: 25 };
 
+  const FREE_MODELS = [
+    { id: 'deepseek/deepseek-r1:free', name: 'DeepSeek R1 (Free - Razonamiento)' },
+    { id: 'meta-llama/llama-3.3-70b-instruct:free', name: 'Llama 3.3 70B (Free)' },
+    { id: 'qwen/qwen-2.5-coder-32b-instruct:free', name: 'Qwen 2.5 Coder 32B (Free - Código)' },
+    { id: 'google/gemini-2.0-flash-exp:free', name: 'Gemini 2.0 Flash Exp (Free)' },
+    { id: 'google/gemini-2.0-pro-exp-02-05:free', name: 'Gemini 2.0 Pro Exp (Free)' },
+    { id: 'mistralai/mistral-small-24b-instruct-2501:free', name: 'Mistral Small 24B (Free)' },
+    { id: 'deepseek/deepseek-chat:free', name: 'DeepSeek V3 Chat (Free)' },
+  ];
+
+  const currentModel = cfg.openrouterModel || 'deepseek/deepseek-r1:free';
+
   const form = $('#settings-form');
   form.innerHTML = `
     <div class="settings-field">
-      <label>Modelo Líder Principal</label>
+      <label>Modelo Líder Principal (Orquestador ReAct)</label>
       <select id="cfg-leader">
         ${providers.map((p) => `<option value="${p.id}" ${p.id === cfg.leader ? 'selected' : ''}>${escapeHtml(p.name)} (${p.id})</option>`).join('')}
       </select>
+    </div>
+
+    <!-- OpenRouter API Settings Box -->
+    <div class="settings-field" style="background:rgba(56,189,248,0.04);border:1px solid rgba(56,189,248,0.2);border-radius:var(--radius-md);padding:14px;margin:4px 0;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <label style="font-weight:700;color:var(--accent);display:flex;align-items:center;gap:6px;">
+          <span>🌐</span> Configuración OpenRouter (Modelos Gratuitos / API)
+        </label>
+        <a href="https://openrouter.ai/keys" target="_blank" style="font-size:11px;color:var(--cyan);text-decoration:none;font-weight:600;">Obtener API Key gratis ↗</a>
+      </div>
+      <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:10px;">
+        Permite usar DeepSeek R1, Llama 3.3, Qwen 2.5 Coder o Gemini gratis mediante API directa, sin requerir navegador Playwright.
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <div>
+          <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px;">OpenRouter API Key:</label>
+          <input type="password" id="cfg-openrouter-key" placeholder="sk-or-v1-xxxxxxxx..." value="${escapeHtml(cfg.openrouterApiKey || '')}" style="font-family:var(--font-mono);font-size:12px;" />
+        </div>
+        <div>
+          <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px;">Modelo de OpenRouter seleccionado:</label>
+          <select id="cfg-openrouter-model">
+            ${FREE_MODELS.map((m) => `<option value="${m.id}" ${m.id === currentModel ? 'selected' : ''}>${m.name} [${m.id}]</option>`).join('')}
+            ${!FREE_MODELS.some(m => m.id === currentModel) && currentModel ? `<option value="${escapeHtml(currentModel)}" selected>${escapeHtml(currentModel)} (Personalizado)</option>` : ''}
+          </select>
+        </div>
+      </div>
     </div>
 
     <div class="settings-field">
@@ -1115,10 +1167,12 @@ async function loadSettings() {
     const workers = $$('.cfg-worker-check:checked').map((c) => c.value);
     const maxIterations = parseInt($('#cfg-max').value, 10) || 25;
     const autonomousDefault = $('#cfg-auto').checked;
+    const openrouterApiKey = $('#cfg-openrouter-key')?.value.trim() || undefined;
+    const openrouterModel = $('#cfg-openrouter-model')?.value.trim() || undefined;
 
     const { data } = await api('/api/config', {
       method: 'POST',
-      body: { leader, workers, maxIterations, autonomousDefault },
+      body: { leader, workers, maxIterations, autonomousDefault, openrouterApiKey, openrouterModel },
     });
 
     if (data && data.ok) {

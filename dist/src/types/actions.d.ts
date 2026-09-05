@@ -4,7 +4,7 @@ export interface DelegateTask {
     agent: WorkerAgentType;
     prompt: string;
 }
-export type ActionType = 'read_file' | 'write_file' | 'run_command' | 'list_directory' | 'grep' | 'glob' | 'check' | 'eval_code' | 'auto_test' | 'codegraph' | 'use_skill' | 'delegate_task' | 'delegate_batch' | 'finish';
+export type ActionType = 'read_file' | 'write_file' | 'run_command' | 'list_directory' | 'grep' | 'glob' | 'check' | 'eval_code' | 'auto_test' | 'codegraph' | 'use_skill' | 'webhook' | 'delegate_task' | 'delegate_batch' | 'finish';
 export interface ActionPayload {
     type: ActionType;
     path?: string;
@@ -21,6 +21,10 @@ export interface ActionPayload {
     prompt?: string;
     tasks?: DelegateTask[];
     summary?: string;
+    url?: string;
+    method?: string;
+    headers?: Record<string, string>;
+    body?: string;
 }
 export type TodoStatus = 'pending' | 'in_progress' | 'completed' | 'failed';
 export interface TodoItem {

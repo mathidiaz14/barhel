@@ -7,5 +7,6 @@ export var ProviderType;
     ProviderType["QWEN"] = "qwen";
     ProviderType["MISTRAL"] = "mistral";
     ProviderType["PERPLEXITY"] = "perplexity";
+    ProviderType["OPENROUTER"] = "openrouter";
 })(ProviderType || (ProviderType = {}));
 //# sourceMappingURL=providers.js.map

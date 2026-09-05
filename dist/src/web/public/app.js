@@ -541,6 +541,8 @@ async function refreshSessionMeta() {
           state.promptHistory.push(t.prompt);
         }
       }
+      renderTimeline(s.turns);
+      renderMetrics(s.turns);
     }
   }
 }
@@ -1047,16 +1049,30 @@ async function loadAuth() {
   }).join('') || '<div class="empty-state-box">Sin datos de autenticación</div>';
 
   const loginGrid = $('#login-providers');
-  loginGrid.innerHTML = state.providers.map((p) => `
-    <div class="auth-card">
-      <div class="ac-name">${escapeHtml(p.name)}</div>
-      <div style="font-size:11px;color:var(--text-muted)">ID: ${escapeHtml(p.id)}</div>
-      <div style="display:flex;gap:6px;margin-top:auto;">
-        <button class="btn primary" data-login="${escapeHtml(p.id)}">Iniciar Sesión</button>
-        <button class="btn ghost" data-clear="${escapeHtml(p.id)}">Borrar</button>
+  loginGrid.innerHTML = state.providers.map((p) => {
+    if (p.id === 'openrouter') {
+      const hasKey = Boolean(state.authStatus[p.id]?.exists);
+      return `
+        <div class="auth-card">
+          <div class="ac-name">${escapeHtml(p.name)}</div>
+          <div style="font-size:11px;color:var(--text-muted)">ID: ${escapeHtml(p.id)} · Autenticación por API Key</div>
+          <div style="display:flex;gap:6px;margin-top:auto;">
+            <button class="btn primary" onclick="switchView('settings')">⚙️ ${hasKey ? 'Cambiar API Key' : 'Configurar API Key'}</button>
+          </div>
+        </div>
+      `;
+    }
+    return `
+      <div class="auth-card">
+        <div class="ac-name">${escapeHtml(p.name)}</div>
+        <div style="font-size:11px;color:var(--text-muted)">ID: ${escapeHtml(p.id)}</div>
+        <div style="display:flex;gap:6px;margin-top:auto;">
+          <button class="btn primary" data-login="${escapeHtml(p.id)}">Iniciar Sesión</button>
+          <button class="btn ghost" data-clear="${escapeHtml(p.id)}">Borrar</button>
+        </div>
       </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 }
 
 // 6. Settings View
@@ -1068,13 +1084,51 @@ async function loadSettings() {
   const providers = pd.providers || [];
   const cfg = cd.config || { leader: 'deepseek', workers: [], autonomousDefault: false, maxIterations: 25 };
 
+  const FREE_MODELS = [
+    { id: 'deepseek/deepseek-r1:free', name: 'DeepSeek R1 (Free - Razonamiento)' },
+    { id: 'meta-llama/llama-3.3-70b-instruct:free', name: 'Llama 3.3 70B (Free)' },
+    { id: 'qwen/qwen-2.5-coder-32b-instruct:free', name: 'Qwen 2.5 Coder 32B (Free - Código)' },
+    { id: 'google/gemini-2.0-flash-exp:free', name: 'Gemini 2.0 Flash Exp (Free)' },
+    { id: 'google/gemini-2.0-pro-exp-02-05:free', name: 'Gemini 2.0 Pro Exp (Free)' },
+    { id: 'mistralai/mistral-small-24b-instruct-2501:free', name: 'Mistral Small 24B (Free)' },
+    { id: 'deepseek/deepseek-chat:free', name: 'DeepSeek V3 Chat (Free)' },
+  ];
+
+  const currentModel = cfg.openrouterModel || 'deepseek/deepseek-r1:free';
+
   const form = $('#settings-form');
   form.innerHTML = `
     <div class="settings-field">
-      <label>Modelo Líder Principal</label>
+      <label>Modelo Líder Principal (Orquestador ReAct)</label>
       <select id="cfg-leader">
         ${providers.map((p) => `<option value="${p.id}" ${p.id === cfg.leader ? 'selected' : ''}>${escapeHtml(p.name)} (${p.id})</option>`).join('')}
       </select>
+    </div>
+
+    <!-- OpenRouter API Settings Box -->
+    <div class="settings-field" style="background:rgba(56,189,248,0.04);border:1px solid rgba(56,189,248,0.2);border-radius:var(--radius-md);padding:14px;margin:4px 0;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <label style="font-weight:700;color:var(--accent);display:flex;align-items:center;gap:6px;">
+          <span>🌐</span> Configuración OpenRouter (Modelos Gratuitos / API)
+        </label>
+        <a href="https://openrouter.ai/keys" target="_blank" style="font-size:11px;color:var(--cyan);text-decoration:none;font-weight:600;">Obtener API Key gratis ↗</a>
+      </div>
+      <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:10px;">
+        Permite usar DeepSeek R1, Llama 3.3, Qwen 2.5 Coder o Gemini gratis mediante API directa, sin requerir navegador Playwright.
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <div>
+          <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px;">OpenRouter API Key:</label>
+          <input type="password" id="cfg-openrouter-key" placeholder="sk-or-v1-xxxxxxxx..." value="${escapeHtml(cfg.openrouterApiKey || '')}" style="font-family:var(--font-mono);font-size:12px;" />
+        </div>
+        <div>
+          <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px;">Modelo de OpenRouter seleccionado:</label>
+          <select id="cfg-openrouter-model">
+            ${FREE_MODELS.map((m) => `<option value="${m.id}" ${m.id === currentModel ? 'selected' : ''}>${m.name} [${m.id}]</option>`).join('')}
+            ${!FREE_MODELS.some(m => m.id === currentModel) && currentModel ? `<option value="${escapeHtml(currentModel)}" selected>${escapeHtml(currentModel)} (Personalizado)</option>` : ''}
+          </select>
+        </div>
+      </div>
     </div>
 
     <div class="settings-field">
@@ -1113,10 +1167,12 @@ async function loadSettings() {
     const workers = $$('.cfg-worker-check:checked').map((c) => c.value);
     const maxIterations = parseInt($('#cfg-max').value, 10) || 25;
     const autonomousDefault = $('#cfg-auto').checked;
+    const openrouterApiKey = $('#cfg-openrouter-key')?.value.trim() || undefined;
+    const openrouterModel = $('#cfg-openrouter-model')?.value.trim() || undefined;
 
     const { data } = await api('/api/config', {
       method: 'POST',
-      body: { leader, workers, maxIterations, autonomousDefault },
+      body: { leader, workers, maxIterations, autonomousDefault, openrouterApiKey, openrouterModel },
     });
 
     if (data && data.ok) {
@@ -1661,7 +1717,107 @@ function init() {
   connectWs();
   ensureSession().then(() => {
     chatInput.focus();
+    if (typeof refreshFileTree === 'function') refreshFileTree();
   });
+}
+
+// ─────── F3.1: Explorador de Archivos ───────
+async function refreshFileTree() {
+  const container = $('#file-tree');
+  if (!container) return;
+  
+  const { data } = await api('/api/files');
+  if (data && data.tree) {
+    container.innerHTML = renderTreeNodes(data.tree);
+  } else {
+    container.innerHTML = '<div class="agent-empty">No se pudo cargar el árbol</div>';
+  }
+}
+
+function renderTreeNodes(nodes) {
+  if (!nodes || !nodes.length) return '';
+  return nodes.map(n => {
+    if (n.type === 'dir') {
+      return `
+        <div class="tree-dir open">
+          <div class="tree-node" onclick="this.parentElement.classList.toggle('open')">
+            <span class="tree-icon">📁</span> ${escapeHtml(n.name)}
+          </div>
+          <div class="tree-children">
+            ${renderTreeNodes(n.children)}
+          </div>
+        </div>
+      `;
+    } else {
+      return `
+        <div class="tree-file">
+          <div class="tree-node" onclick="openFileViewer('${escapeHtml(n.path)}')">
+            <span class="tree-icon">📄</span> ${escapeHtml(n.name)}
+          </div>
+        </div>
+      `;
+    }
+  }).join('');
+}
+
+async function openFileViewer(path) {
+  const { data } = await api('/api/files/content?path=' + encodeURIComponent(path));
+  if (data && data.content !== undefined) {
+    addEntry(`
+      <div class="tool-output-header">
+        <span>Archivo: ${escapeHtml(path)}</span>
+        <button class="btn-copy-code" title="Copiar">📋 Copiar</button>
+      </div>
+      <pre><code>${escapeHtml(data.content)}</code></pre>
+    `, 'tool-output');
+    
+    const copyBtn = $('#transcript .btn-copy-code:last-child');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', () => {
+        navigator.clipboard.writeText(data.content);
+        showToast('Copiado al portapapeles', 'success');
+      });
+    }
+  }
+}
+
+// ─────── F3.2: Timeline ───────
+function renderTimeline(turns) {
+  const container = $('#session-timeline');
+  if (!container) return;
+  if (!turns || !turns.length) {
+    container.innerHTML = 'Sin eventos.';
+    return;
+  }
+  container.innerHTML = turns.map((t, i) => `
+    <div style="font-size: 0.85em; margin-bottom: 8px; border-left: 2px solid var(--blue); padding-left: 8px;">
+      <div style="color: var(--text-muted)">Turno ${i + 1}</div>
+      <div style="font-weight: 500">${escapeHtml(t.prompt || 'Autónomo')}</div>
+    </div>
+  `).join('');
+}
+
+// ─────── F3.3: Metrics ───────
+function renderMetrics(turns) {
+  if (!turns) return;
+  let fileEdits = 0; 
+  let tokens = turns.length * 1500; 
+  
+  turns.forEach(t => {
+    if (t.thought && t.thought.toolCalls) {
+      t.thought.toolCalls.forEach(tc => {
+        if (tc.name === 'replace_file_content' || tc.name === 'write_to_file' || tc.name === 'multi_replace_file_content') fileEdits++;
+      });
+    }
+  });
+
+  const mTurns = $('#met-turns');
+  const mTokens = $('#met-tokens');
+  const mFiles = $('#met-cmds');
+  
+  if (mTurns) mTurns.textContent = turns.length;
+  if (mTokens) mTokens.textContent = '~' + (tokens / 1000).toFixed(1) + 'k';
+  if (mFiles) mFiles.textContent = fileEdits;
 }
 
 document.addEventListener('DOMContentLoaded', init);

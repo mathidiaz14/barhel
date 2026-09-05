@@ -291,7 +291,7 @@ export class WebServer {
       }
 
       if (pathname === '/api/files/content' && method === 'GET') {
-        const relPath = params.get('path');
+        const relPath = url.searchParams.get('path');
         if (!relPath) return this.sendJson(res, 400, { error: 'path param is required' });
         const absPath = path.join(this.workdir, relPath);
         // Basic security check

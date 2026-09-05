@@ -54,4 +54,22 @@ export async function gitCommit(cwd, message) {
     }
     return commitRes.stdout || '(committed)';
 }
+export async function gitBranchList(cwd) {
+    const res = await runGit(cwd, ['branch']);
+    if (!res.success)
+        return `[git branch] ${res.error}`;
+    return res.stdout;
+}
+export async function gitBranchCreate(cwd, name) {
+    const res = await runGit(cwd, ['checkout', '-b', name]);
+    if (!res.success)
+        return `[git checkout -b] ${res.error}`;
+    return res.stdout;
+}
+export async function gitBranchSwitch(cwd, name) {
+    const res = await runGit(cwd, ['checkout', name]);
+    if (!res.success)
+        return `[git checkout] ${res.error}`;
+    return res.stdout;
+}
 //# sourceMappingURL=git.js.map

@@ -34,6 +34,25 @@ export function listSessionsStatus(): Record<string, { path: string; exists: boo
   const base = getSessionBasePath();
 
   for (const provider of providers) {
+    if (provider === ProviderType.OPENROUTER) {
+      const cfgPath = path.join(SESSIONS_BASE_DIR, 'config.json');
+      let hasKey = Boolean(process.env.OPENROUTER_API_KEY);
+      if (!hasKey && fs.existsSync(cfgPath)) {
+        try {
+          const parsed = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
+          hasKey = Boolean(parsed.openrouterApiKey);
+        } catch {
+          // Ignorar error de lectura
+        }
+      }
+      result[provider] = {
+        path: 'API Key (config.json / env)',
+        exists: hasKey,
+        fileCount: hasKey ? 1 : 0,
+      };
+      continue;
+    }
+
     const pPath = path.join(base, provider.toLowerCase());
     let count = 0;
     let hasRealSession = false;

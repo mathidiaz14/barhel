@@ -71,6 +71,12 @@ export declare class SessionManager {
     private handleRestore;
     private handleImportSessions;
     private handleClearSessions;
+    private handleMemory;
+    private handlePromptLibrary;
+    private handleBranch;
+    private handleGithub;
+    private handleMcp;
+    private handleContext;
     private getHelpText;
     private runTests;
     private runGraph;

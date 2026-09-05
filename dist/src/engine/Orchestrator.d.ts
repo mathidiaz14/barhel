@@ -14,6 +14,7 @@ export declare class Orchestrator {
     private isInitialized;
     private turnCount;
     private shutdownPromise;
+    private fileWatcher;
     private fallbackOrder;
     private fallbackUsed;
     private sendFailures;
@@ -25,6 +26,7 @@ export declare class Orchestrator {
     getSessionId(): string;
     getSessionTitle(): string;
     setSessionTitle(newTitle: string): void;
+    toggleWatch(): string;
     getLeaderId(): string;
     getActiveWorkers(): string[];
     getWorkdir(): string;

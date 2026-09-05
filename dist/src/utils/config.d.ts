@@ -15,6 +15,8 @@ export interface BarhelConfig {
     telegramToken?: string;
     telegramChatId?: string;
     allowedChatIds?: number[];
+    openrouterApiKey?: string;
+    openrouterModel?: string;
 }
 export declare class ConfigManager {
     private static ensureDir;

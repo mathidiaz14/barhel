@@ -12,6 +12,11 @@ import { ProgressSupervisor } from './ProgressSupervisor.js';
 import { SkillManager } from '../skills/SkillManager.js';
 import { EventBus } from '../web/EventBus.js';
 import { SessionContext } from '../web/SessionContext.js';
+import { MemoryStore } from '../utils/MemoryStore.js';
+import { SnapshotManager } from './SnapshotManager.js';
+import { FileWatcher } from './FileWatcher.js';
+import { ContextManager } from '../utils/ContextManager.js';
+import { RateLimiter } from '../utils/RateLimiter.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import pc from 'picocolors';
@@ -28,6 +33,7 @@ export class Orchestrator {
     isInitialized = false;
     turnCount = 0;
     shutdownPromise = null;
+    fileWatcher = new FileWatcher();
     fallbackOrder = [];
     fallbackUsed = new Set();
     sendFailures = 0;
@@ -115,6 +121,18 @@ export class Orchestrator {
     setSessionTitle(newTitle) {
         this.currentSession.title = newTitle.trim();
         HistoryManager.saveSession(this.currentSession);
+    }
+    toggleWatch() {
+        if (this.fileWatcher.isRunning) {
+            this.fileWatcher.stop();
+            return 'File Watcher detenido.';
+        }
+        else {
+            this.fileWatcher.start(this.getWorkdir(), (event, filename) => {
+                logger.info(`[Watch] Archivo ${event}: ${filename}`);
+            });
+            return 'File Watcher iniciado.';
+        }
     }
     getLeaderId() {
         return this.leaderId;
@@ -362,9 +380,14 @@ export class Orchestrator {
         await SessionContext.run(this.getSessionId(), () => this.runTurnInternal(userGoal));
     }
     async runTurnInternal(userGoal) {
+        if (!RateLimiter.checkLimit()) {
+            logger.error('Rate limit excedido: Demasiados turnos por minuto. Protección activada.');
+            return;
+        }
         this.isTurnRunning = true;
         this.isInterrupted = false;
         EventBus.emit(this.getSessionId(), 'turn_start', { message: userGoal, summary: userGoal });
+        await SnapshotManager.takeSnapshot(this.toolEngine.getWorkdir(), this.getSessionId());
         if (!this.isInitialized) {
             await this.initSession();
         }
@@ -629,6 +652,12 @@ export class Orchestrator {
                 console.log(pc.yellow('\n[interrupted] Generación cancelada por el usuario.\n'));
                 EventBus.emit(this.getSessionId(), 'interrupt', {});
             }
+            const MAX_TURNS_BEFORE_SUMMARIZE = 30;
+            const turnsCount = this.currentSession.turns.length;
+            const lastSummarized = this.currentSession.lastSummarizedTurnIndex ?? 0;
+            if (this.autoSummarize && turnsCount >= MAX_TURNS_BEFORE_SUMMARIZE && (turnsCount - lastSummarized) >= 15) {
+                void this.summarizeSessionInternal(true).catch(() => { });
+            }
         }
     }
     /**
@@ -834,12 +863,15 @@ REGLA ESTRICTA DE EJECUCIÓN SECUENCIAL DE TAREAS:
             : '';
         const skillsPrompt = SkillManager.buildSkillsSystemPrompt();
         const todosPrompt = this.buildTodosContextPrompt();
+        const memoryPrompt = MemoryStore.getContextBlock(this.toolEngine.getWorkdir());
+        const fixedContextPrompt = ContextManager.getContextString(this.toolEngine.getWorkdir());
         return `ERES BARHEL (${leaderName}), UN ASISTENTE DE CODIFICACIÓN CLI AUTÓNOMO Y AVANZADO (ESTILO OPENCODE / CLAUDE CODE).
 Tu objetivo es resolver la siguiente instrucción del usuario en su proyecto local:
 "${userGoal}"
 
 DIRECTORIO DE TRABAJO: ${this.toolEngine.getWorkdir()}
-${planOnlyNote}${summaryNote}${skillsPrompt}${todosPrompt}
+${fixedContextPrompt}
+${planOnlyNote}${summaryNote}${memoryPrompt}${skillsPrompt}${todosPrompt}
 PROTOCOLO DE ACCIÓN REACT OBLIGATORIO:
 Debes responder SIEMPRE Y EXCLUSIVAMENTE con un único bloque JSON válido:
 

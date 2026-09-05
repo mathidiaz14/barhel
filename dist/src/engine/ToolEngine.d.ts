@@ -88,4 +88,8 @@ export declare class ToolEngine {
      * Ejecuta el runner de pruebas del proyecto
      */
     private executeAutoTest;
+    /**
+     * Ejecuta una petición HTTP webhook externa
+     */
+    private executeWebhook;
 }

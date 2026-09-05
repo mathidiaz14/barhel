@@ -9,6 +9,11 @@ import { logger } from '../utils/logger.js';
 import { listSessionsStatus } from '../utils/session.js';
 import { EventBus } from './EventBus.js';
 import { getBarhelVersion } from '../utils/version.js';
+import { MemoryStore } from '../utils/MemoryStore.js';
+import { ContextManager } from '../utils/ContextManager.js';
+import { SnapshotManager } from '../engine/SnapshotManager.js';
+import { PromptLibrary } from '../utils/PromptLibrary.js';
+import { gitBranchList, gitBranchCreate, gitBranchSwitch, getGitBranch } from '../utils/git.js';
 const MAX_CONCURRENT_ORCHESTRATORS = 3;
 export class SessionManager {
     orchestrators = new Map();
@@ -352,6 +357,39 @@ export class SessionManager {
             case 'clear':
                 EventBus.emit(sessionId, 'clear', {});
                 return { ok: true, output: 'Pantalla de chat limpiada.' };
+            case 'memory':
+                return this.handleMemory(orch.getWorkdir(), arg);
+            case 'rollback':
+                if (SnapshotManager.restoreSnapshot(orch.getWorkdir(), sessionId)) {
+                    return { ok: true, output: 'Rollback completado exitosamente. El proyecto volvió a su estado anterior.' };
+                }
+                else {
+                    return { ok: false, output: 'Fallo al ejecutar rollback.', message: 'No se pudo hacer rollback' };
+                }
+            case 'prompt':
+                return this.handlePromptLibrary(orch, arg);
+            case 'branch':
+                return await this.handleBranch(orch.getWorkdir(), arg);
+            case 'watch': {
+                const out = orch.toggleWatch();
+                return { ok: true, output: out };
+            }
+            case 'github':
+                return await this.handleGithub(orch.getWorkdir(), arg);
+            case 'mcp':
+                return await this.handleMcp(orch.getWorkdir(), arg);
+            case 'context':
+                return this.handleContext(orch.getWorkdir(), arg);
+            case 'workdir':
+                if (!arg)
+                    return { ok: false, output: '', message: 'Uso: /workdir <ruta absoluta o relativa>' };
+                try {
+                    orch.setWorkdir(arg);
+                    return { ok: true, output: `Workspace cambiado exitosamente a: ${orch.getWorkdir()}` };
+                }
+                catch (err) {
+                    return { ok: false, output: '', message: err.message };
+                }
             case 'help':
                 return this.getHelpText();
             case 'info': {
@@ -636,6 +674,155 @@ export class SessionManager {
                 ? `Sesiones borradas para: ${cleared.join(', ')}.`
                 : 'No se encontraron sesiones para borrar.',
         };
+    }
+    handleMemory(workdir, arg) {
+        const parts = (arg || '').trim().split(/\s+/);
+        const sub = parts[0]?.toLowerCase();
+        if (sub === 'add') {
+            const fact = parts.slice(1).join(' ').trim();
+            if (!fact)
+                return { ok: false, output: '', message: 'Uso: /memory add <hecho>' };
+            MemoryStore.add(workdir, fact);
+            return { ok: true, output: `Hecho agregado a la memoria: "${fact}"` };
+        }
+        if (sub === 'remove') {
+            const idx = parseInt(parts[1], 10) - 1;
+            if (isNaN(idx))
+                return { ok: false, output: '', message: 'Uso: /memory remove <numero>' };
+            const ok = MemoryStore.remove(workdir, idx);
+            return { ok, output: ok ? 'Entrada eliminada de la memoria.' : 'Índice no válido.' };
+        }
+        if (sub === 'clear') {
+            MemoryStore.clear(workdir);
+            return { ok: true, output: 'Memoria limpiada por completo.' };
+        }
+        if (sub === 'list' || !sub) {
+            const entries = MemoryStore.list(workdir);
+            if (entries.length === 0)
+                return { ok: true, output: 'La memoria está vacía.' };
+            const lines = entries.map((e, idx) => `[${idx + 1}] ${e.fact}`);
+            return { ok: true, output: `🧠 Memoria del proyecto:\n\n${lines.join('\n')}` };
+        }
+        return { ok: false, output: '', message: 'Uso: /memory <add|list|remove|clear>' };
+    }
+    handlePromptLibrary(orch, arg) {
+        const parts = (arg || '').trim().split(/\s+/);
+        const sub = parts[0]?.toLowerCase();
+        const workdir = orch.getWorkdir();
+        if (sub === 'save') {
+            const name = parts[1];
+            const text = parts.slice(2).join(' ').trim();
+            if (!name || !text)
+                return { ok: false, output: '', message: 'Uso: /prompt save <nombre> <texto>' };
+            PromptLibrary.save(workdir, name, text);
+            return { ok: true, output: `Prompt "${name}" guardado.` };
+        }
+        if (sub === 'remove') {
+            const name = parts[1];
+            if (!name)
+                return { ok: false, output: '', message: 'Uso: /prompt remove <nombre>' };
+            const ok = PromptLibrary.remove(workdir, name);
+            return { ok, output: ok ? `Prompt "${name}" eliminado.` : `Prompt "${name}" no encontrado.` };
+        }
+        if (sub === 'list' || !sub) {
+            const entries = PromptLibrary.list(workdir);
+            if (entries.length === 0)
+                return { ok: true, output: 'No hay prompts guardados.' };
+            const lines = entries.map(e => `- **${e.name}**: ${e.text}`);
+            return { ok: true, output: `📚 Biblioteca de Prompts:\n\n${lines.join('\n')}` };
+        }
+        if (sub === 'run') {
+            const name = parts[1];
+            if (!name)
+                return { ok: false, output: '', message: 'Uso: /prompt run <nombre>' };
+            const entry = PromptLibrary.get(workdir, name);
+            if (!entry)
+                return { ok: false, output: '', message: `Prompt "${name}" no encontrado.` };
+            // Simulate user input
+            void orch.runTurn(entry.text).catch(err => {
+                logger.error('Error ejecutando prompt:', err);
+            });
+            return { ok: true, output: `Ejecutando prompt: ${name}...` };
+        }
+        return { ok: false, output: '', message: 'Uso: /prompt <save|list|run|remove>' };
+    }
+    async handleBranch(workdir, arg) {
+        const parts = (arg || '').trim().split(/\s+/);
+        const sub = parts[0]?.toLowerCase();
+        if (sub === 'new') {
+            const name = parts[1];
+            if (!name)
+                return { ok: false, output: '', message: 'Uso: /branch new <nombre>' };
+            const out = await gitBranchCreate(workdir, name);
+            return { ok: true, output: out };
+        }
+        if (sub === 'switch') {
+            const name = parts[1];
+            if (!name)
+                return { ok: false, output: '', message: 'Uso: /branch switch <nombre>' };
+            const out = await gitBranchSwitch(workdir, name);
+            return { ok: true, output: out };
+        }
+        if (sub === 'list' || !sub) {
+            const out = await gitBranchList(workdir);
+            return { ok: true, output: out || 'No hay ramas o no es un repo git.' };
+        }
+        if (sub === 'current') {
+            const branch = getGitBranch(workdir);
+            return { ok: true, output: branch ? `Rama actual: ${branch}` : 'No se pudo determinar la rama actual.' };
+        }
+        return { ok: false, output: '', message: 'Uso: /branch <new|switch|list|current>' };
+    }
+    async handleGithub(workdir, arg) {
+        if (!arg)
+            return { ok: false, output: '', message: 'Uso: /github <comando gh>' };
+        const { execAsync } = await import('../utils/exec.js');
+        const res = await execAsync(`gh ${arg}`, { cwd: workdir });
+        if (res.ok) {
+            return { ok: true, output: res.combined || 'Comando GitHub ejecutado.' };
+        }
+        else {
+            return { ok: false, output: res.combined, message: 'Fallo al ejecutar GitHub CLI (¿tienes gh instalado?).' };
+        }
+    }
+    async handleMcp(workdir, arg) {
+        if (!arg)
+            return { ok: false, output: '', message: 'Uso: /mcp <start|stop> <server>' };
+        const parts = arg.trim().split(/\s+/);
+        if (parts[0] === 'start') {
+            return { ok: true, output: `[Stub] Iniciando conexión MCP al servidor: ${parts[1] || 'desconocido'}...\nLa integración nativa de MCP está planeada para la Fase 5 avanzada.` };
+        }
+        return { ok: true, output: `[Stub] Comando MCP recibido: ${arg}` };
+    }
+    handleContext(workdir, arg) {
+        const parts = arg.trim().split(/\s+/);
+        const action = parts[0];
+        const file = parts[1];
+        if (!action)
+            return { ok: false, output: '', message: 'Uso: /context <add|remove|list> [archivo]' };
+        if (action === 'add') {
+            if (!file)
+                return { ok: false, output: '', message: 'Especifica la ruta relativa del archivo a agregar.' };
+            if (ContextManager.addFile(workdir, file)) {
+                return { ok: true, output: `Archivo ${file} añadido al contexto fijo.` };
+            }
+            return { ok: false, output: '', message: `No se pudo agregar ${file}.` };
+        }
+        else if (action === 'remove') {
+            if (!file)
+                return { ok: false, output: '', message: 'Especifica la ruta relativa del archivo a remover.' };
+            if (ContextManager.removeFile(workdir, file)) {
+                return { ok: true, output: `Archivo ${file} removido del contexto fijo.` };
+            }
+            return { ok: false, output: '', message: `No se pudo remover ${file}.` };
+        }
+        else if (action === 'list') {
+            const files = ContextManager.list(workdir);
+            return { ok: true, output: files.length > 0 ? `Archivos en contexto fijo:\n- ${files.join('\n- ')}` : 'El contexto fijo está vacío.' };
+        }
+        else {
+            return { ok: false, output: '', message: 'Acción no válida. Usa add, remove, list.' };
+        }
     }
     getHelpText() {
         return {

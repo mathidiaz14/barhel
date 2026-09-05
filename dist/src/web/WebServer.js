@@ -13,6 +13,8 @@ import { HistoryManager } from '../utils/history.js';
 import { listSessionsStatus } from '../utils/session.js';
 import { logger } from '../utils/logger.js';
 import { getBarhelVersion } from '../utils/version.js';
+import { MemoryStore } from '../utils/MemoryStore.js';
+import { PromptLibrary } from '../utils/PromptLibrary.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const STATIC_DIR = path.join(__dirname, 'public');
 const MIME = {
@@ -240,6 +242,87 @@ export class WebServer {
                 }));
                 return this.sendJson(res, 200, { history });
             }
+            // Archivos (F3.1)
+            if (pathname === '/api/files' && method === 'GET') {
+                const getTree = (dir, depth = 0) => {
+                    if (depth > 5)
+                        return []; // limit depth
+                    try {
+                        const entries = fs.readdirSync(dir, { withFileTypes: true });
+                        const result = [];
+                        for (const entry of entries) {
+                            if (entry.name === 'node_modules' || entry.name === '.git' || entry.name.startsWith('.barhel'))
+                                continue;
+                            const fullPath = path.join(dir, entry.name);
+                            const relPath = path.relative(this.workdir, fullPath).replace(/\\/g, '/');
+                            if (entry.isDirectory()) {
+                                result.push({ name: entry.name, path: relPath, type: 'dir', children: getTree(fullPath, depth + 1) });
+                            }
+                            else {
+                                result.push({ name: entry.name, path: relPath, type: 'file' });
+                            }
+                        }
+                        return result.sort((a, b) => {
+                            if (a.type === b.type)
+                                return a.name.localeCompare(b.name);
+                            return a.type === 'dir' ? -1 : 1;
+                        });
+                    }
+                    catch {
+                        return [];
+                    }
+                };
+                return this.sendJson(res, 200, { tree: getTree(this.workdir) });
+            }
+            if (pathname === '/api/files/content' && method === 'GET') {
+                const relPath = url.searchParams.get('path');
+                if (!relPath)
+                    return this.sendJson(res, 400, { error: 'path param is required' });
+                const absPath = path.join(this.workdir, relPath);
+                // Basic security check
+                if (!absPath.startsWith(this.workdir))
+                    return this.sendJson(res, 403, { error: 'Access denied' });
+                try {
+                    const content = fs.readFileSync(absPath, 'utf-8');
+                    return this.sendJson(res, 200, { content });
+                }
+                catch (err) {
+                    return this.sendJson(res, 500, { error: err.message });
+                }
+            }
+            // Memoria
+            if (pathname === '/api/memory' && method === 'GET') {
+                const entries = MemoryStore.list(this.workdir);
+                return this.sendJson(res, 200, { entries });
+            }
+            if (pathname === '/api/memory' && method === 'POST') {
+                const body = await this.readBody(req);
+                if (body.action === 'add') {
+                    MemoryStore.add(this.workdir, body.fact);
+                }
+                else if (body.action === 'remove') {
+                    MemoryStore.remove(this.workdir, body.index);
+                }
+                else if (body.action === 'clear') {
+                    MemoryStore.clear(this.workdir);
+                }
+                return this.sendJson(res, 200, { ok: true, entries: MemoryStore.list(this.workdir) });
+            }
+            // Prompts
+            if (pathname === '/api/prompts' && method === 'GET') {
+                const entries = PromptLibrary.list(this.workdir);
+                return this.sendJson(res, 200, { entries });
+            }
+            if (pathname === '/api/prompts' && method === 'POST') {
+                const body = await this.readBody(req);
+                if (body.action === 'save') {
+                    PromptLibrary.save(this.workdir, body.name, body.text);
+                }
+                else if (body.action === 'remove') {
+                    PromptLibrary.remove(this.workdir, body.name);
+                }
+                return this.sendJson(res, 200, { ok: true, entries: PromptLibrary.list(this.workdir) });
+            }
             // Comandos disponibles con metadatos completos para el Command Palette interactivo
             if (pathname === '/api/commands' && method === 'GET') {
                 const commands = [
@@ -265,6 +348,15 @@ export class WebServer {
                     { name: '/export', desc: 'Exporta la sesión actual a formato Markdown o JSON', category: 'session', categoryLabel: 'Sesión', icon: '💾', placeholder: 'md o json' },
                     { name: '/backup', desc: 'Exporta copia de seguridad (.tar.gz) de sesiones e historial', category: 'session', categoryLabel: 'Sesión', icon: '🗄️', placeholder: 'ruta de archivo (opcional)' },
                     { name: '/restore', desc: 'Importa sesiones e historial desde un archivo .tar.gz', category: 'session', categoryLabel: 'Sesión', icon: '📥', placeholder: 'ruta del archivo .tar.gz', requiresArg: true },
+                    { name: '/memory', desc: 'Gestiona la memoria semántica persistente del proyecto', category: 'session', categoryLabel: 'Sesión', icon: '🧠', placeholder: 'add/list/remove/clear [hecho]' },
+                    { name: '/context', desc: 'Gestiona archivos anclados al prompt del agente', category: 'session', categoryLabel: 'Sesión', icon: '📌', placeholder: 'add/remove/list [ruta]' },
+                    { name: '/prompt', desc: 'Guarda o ejecuta prompts personalizados', category: 'session', categoryLabel: 'Sesión', icon: '📝', placeholder: 'save/list/run/remove [nombre]' },
+                    { name: '/workdir', desc: 'Cambia dinámicamente la ruta del workspace activo', category: 'session', categoryLabel: 'Sesión', icon: '📂', placeholder: 'ruta/del/workspace', requiresArg: true },
+                    { name: '/branch', desc: 'Gestiona las ramas de Git del proyecto', category: 'git', categoryLabel: 'Git', icon: '🌿', placeholder: 'new/switch/list/current [nombre]' },
+                    { name: '/github', desc: 'Ejecuta comandos del CLI de GitHub (gh)', category: 'git', categoryLabel: 'Git', icon: '🐙', placeholder: 'comando gh (ej. pr list)', requiresArg: true },
+                    { name: '/mcp', desc: 'Gestiona conexiones a servidores MCP', category: 'tools', categoryLabel: 'Testing & Tools', icon: '🔌', placeholder: 'start/stop [server]', requiresArg: true },
+                    { name: '/watch', desc: 'Inicia o detiene el observador de cambios en archivos', category: 'tools', categoryLabel: 'Testing & Tools', icon: '👁️' },
+                    { name: '/rollback', desc: 'Revierte los cambios de la sesión actual (deshace el trabajo no commiteado)', category: 'session', categoryLabel: 'Sesión', icon: '⏪' },
                     { name: '/doctor', desc: 'Diagnóstico profundo de autenticación, Cloudflare y selectores', category: 'diagnosis', categoryLabel: 'Diagnóstico', icon: '🩺', placeholder: 'proveedor (opcional)' },
                     { name: '/status', desc: 'Muestra el estado de autenticación y conexión de proveedores', category: 'diagnosis', categoryLabel: 'Diagnóstico', icon: '🔑' },
                     { name: '/login', desc: 'Inicia sesión en la interfaz web de un proveedor', category: 'diagnosis', categoryLabel: 'Diagnóstico', icon: '🌐', placeholder: 'proveedor (ej: deepseek, chatgpt)' },
@@ -275,6 +367,17 @@ export class WebServer {
                     { name: '/clear', desc: 'Limpia los mensajes visuales en la pantalla del chat', category: 'tools', categoryLabel: 'Testing & Tools', icon: '🧹' },
                     { name: '/help', desc: 'Muestra la guía completa de comandos y ayuda', category: 'tools', categoryLabel: 'Testing & Tools', icon: '❓' },
                 ];
+                // Añadir prompts dinámicamente como comandos rápidos
+                const prompts = PromptLibrary.list(this.workdir);
+                for (const p of prompts) {
+                    commands.push({
+                        name: `/prompt run ${p.name}`,
+                        desc: `Ejecuta el prompt: ${p.text.slice(0, 50)}${p.text.length > 50 ? '...' : ''}`,
+                        category: 'session',
+                        categoryLabel: 'Prompts',
+                        icon: '⚡'
+                    });
+                }
                 return this.sendJson(res, 200, { commands });
             }
             // Skills API

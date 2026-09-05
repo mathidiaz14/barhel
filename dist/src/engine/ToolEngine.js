@@ -109,6 +109,8 @@ export class ToolEngine {
                     return await this.executeCodeGraph(action.symbol, action.query);
                 case 'use_skill':
                     return await this.executeSkill(action.skill);
+                case 'webhook':
+                    return await this.executeWebhook(action.url, action.method, action.headers, action.body);
                 case 'finish':
                     return {
                         success: true,
@@ -697,6 +699,36 @@ export class ToolEngine {
             output: `[RESULTADO PRUEBAS DEL PROYECTO (${result.success ? 'PASARON ✓' : 'FALLARON ✖'} - ${result.durationMs}ms)]:\n${result.output}`,
             error: result.error,
         };
+    }
+    /**
+     * Ejecuta una petición HTTP webhook externa
+     */
+    async executeWebhook(url, method = 'POST', headers, body) {
+        if (!url) {
+            return { success: false, output: 'Se requiere el parámetro "url".' };
+        }
+        try {
+            const fetchOpts = {
+                method: method.toUpperCase(),
+                headers: {
+                    'Content-Type': 'application/json',
+                    'User-Agent': 'Barhel-Agent/1.0',
+                    ...(headers || {})
+                }
+            };
+            if (['POST', 'PUT', 'PATCH'].includes(fetchOpts.method) && body) {
+                fetchOpts.body = typeof body === 'string' ? body : JSON.stringify(body);
+            }
+            const response = await fetch(url, fetchOpts);
+            const resText = await response.text();
+            return {
+                success: response.ok,
+                output: `Status: ${response.status} ${response.statusText}\nBody:\n${resText.substring(0, 1500)}${resText.length > 1500 ? '...(truncado)' : ''}`
+            };
+        }
+        catch (err) {
+            return { success: false, output: `Fallo al enviar webhook: ${err.message}` };
+        }
     }
 }
 //# sourceMappingURL=ToolEngine.js.map
